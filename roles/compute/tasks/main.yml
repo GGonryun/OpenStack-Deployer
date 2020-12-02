@@ -1,0 +1,125 @@
+---
+- name: 'install packages'
+  yum:
+    name:
+      - centos-release-openstack-train
+      - python-openstackclient
+    state: present
+
+- name: 'install packages2'
+  yum:
+    name:
+      - openstack-selinux
+      - openstack-nova-compute
+      - openstack-neutron-linuxbridge
+      - ebtables 
+      - ipset
+      - chrony
+    state: present
+
+- name: 'update firewall'
+  shell: firewall-cmd --permanent --add-service=ntp
+  register: firewall_update
+
+- name: 'reload firewall'
+  shell: firewall-cmd --reload
+  when: firewall_update is changed
+
+- name: 'copy startup template'
+  template:
+    src: startup.sh.j2
+    dest: '~/startup.sh'
+    owner: root
+    group: root
+    mode: '0755'
+  register: startup_update
+
+
+- name: 'copy chrony template'
+  template:
+    src: chrony.conf.j2
+    dest: /etc/chrony.conf
+  register: chrony_update
+
+- name: 'restart chrony'
+  systemd:
+    name: chronyd
+    state: restarted
+    enabled: yes
+  when: chrony_update is changed
+
+- name: 'copy nova template'
+  template:
+    src: nova.conf.j2
+    dest: /etc/nova/nova.conf
+  register: nova_update
+
+- name: 'install nova'
+  block:
+    - name: 'create nova state folder'
+      file:
+        path: "{{ nova_state_path }}"
+        state: directory
+    - name: 'copy existing nova state data'
+      copy:
+        remote_src: yes
+        src: /var/lib/nova
+        dest: "{{ nova_state_path }}"
+    - name: 'add group permissions'
+      shell: "chgrp -R nova {{ nova_state_path }}"
+    - name: 'add owner permissions'
+      shell: "chown -R nova {{ nova_state_path }}"
+    - name: 'set selinux permissions'
+      shell: "semanage fcontext -a -t nova_var_lib_t '{{ nova_state_path }}(/.*)?'"
+    - name: 'refresh permissions'
+      shell: "restorecon -vvRF {{ nova_state_path }}"
+    - name: 'grep cpu info'
+      shell: egrep -c '(vmx|svm)' /proc/cpuinfo
+    - name: 'restart libvirt'
+      systemd:
+        name: libvirtd.service
+        state: restarted
+        enabled: yes
+  when: nova_update is changed
+
+- name: 'copy neutron template'
+  template:
+    src: neutron.conf.j2
+    dest: /etc/neutron/neutron.conf
+  register: neutron_update
+  
+- name: 'copy linuxbridge_agent template'
+  template:
+    src: linuxbridge_agent.ini.j2
+    dest: /etc/neutron/plugins/ml2/linuxbridge_agent.ini
+  register: linuxbridge_update
+
+- name: 'modprobe netfilter'
+  shell: modprobe br_netfilter
+  when: (nova_update is changed) or (neutron_update is changed) or (linuxbridge_update is changed)
+
+- name: 'sysctl'
+  shell: sysctl -p
+  when: (nova_update is changed) or (neutron_update is changed) or (linuxbridge_update is changed)
+
+- name: 'update sysctl ip tables'
+  shell: sysctl net.bridge.bridge-nf-call-iptables
+  when: (nova_update is changed) or (neutron_update is changed) or (linuxbridge_update is changed)
+
+- name: 'update iptables ipv6'
+  shell: sysctl net.bridge.bridge-nf-call-ip6tables
+  when: (nova_update is changed) or (neutron_update is changed) or (linuxbridge_update is changed)
+
+- name: 'restart nova compute'
+  systemd:
+    name: openstack-nova-compute.service
+    state: restarted
+    enabled: yes
+  when: (nova_update is changed) or (neutron_update is changed) 
+  
+- name: 'restart linuxbridge agent'
+  systemd:
+    name:  neutron-linuxbridge-agent.service
+    state: restarted
+    enabled: yes
+  when: linuxbridge_update is changed

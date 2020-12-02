@@ -1,0 +1,44 @@
+---
+- name: 'update and upgrade packages'
+  yum:
+    update_cache: 'yes'
+    name: '*'
+    state: latest
+  register: updated_packages
+  
+- name: 'set host'
+  hostname:
+    name: "{{ inventory_hostname }}"
+  when: not inventory_hostname is match('(\d{1,3}\.){3}\d{1,3}')
+  register: hostname
+
+- name: 'update hosts'
+  lineinfile:
+    dest: /etc/hosts
+    regexp: "^{{ hostvars[item]['ansible_host'] }}.+$"
+    line: "{{ hostvars[item]['ansible_host'] }} {{ hostvars[item]['ansible_hostname']}} {{ hostvars[item]['ansible_host']}}.usdcyber.edu"
+    state: present
+    backup: yes
+  with_items: "{{ groups['all'] }}"
+
+- name: 'set timezone'
+  timezone:
+    name: UTC
+  register: timezone
+
+- name: 'check dependencies'
+  yum:
+    name: ['python', 'python3', 'make']
+    state: present
+
+# - name: Reboot system
+#   shell: sleep 1s && reboot
+#   async: 1
+#   poll: 0
+#   ignore_errors: true
+#   when: "(updated_packages is changed) or (swap is changed) or (timezone is changed) or (hostname is changed)"
+
+# - name: Wait for reboot
+#   local_action: wait_for host={{ ansible_host }} port=22 state=started delay=10
+#   become: false
+#   when: "(updated_packages is changed) or (timezone is changed) or (hostname is changed)"

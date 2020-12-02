@@ -1,0 +1,6 @@
+---
+- hosts: X
+  order: inventory
+  tasks:
+    - name: 'disable repl
+      shell: yum-config-manager --disable epel

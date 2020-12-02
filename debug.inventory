@@ -1,0 +1,23 @@
+[openstack]
+controller ansible_host=10.10.10.18 provider_network_ip=192.168.128.18 
+block1 ansible_host=10.10.10.14 provider_network_ip=192.168.128.14
+compute1 ansible_host=10.10.10.11 provider_network_ip=192.168.128.11 physical_interface=em1
+compute2 ansible_host=10.10.10.16 provider_network_ip=192.168.128.16 physical_interface=enp65s0f0
+compute3 ansible_host=10.10.10.17 provider_network_ip=192.168.128.17 physical_interface=enp65s0f0
+compute4 ansible_host=10.10.10.26 provider_network_ip=192.168.128.26 physical_interface=em1
+compute5 ansible_host=10.10.10.19 provider_network_ip=192.168.128.19 physical_interface=em1
+compute6 ansible_host=10.10.10.67 provider_network_ip=192.168.128.67 physical_interface=em1
+
+[computes]
+compute1
+compute2
+compute3
+compute4
+compute5
+compute6
+
+[controllers]
+controller
+
+[blocks]
+block1

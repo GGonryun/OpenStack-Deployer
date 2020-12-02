@@ -1,0 +1,11 @@
+[linux_bridge]
+physical_interface_mappings = provider:{{ hostvars[inventory_hostname]['physical_interface']}}
+
+[vxlan]
+enable_vxlan = true
+local_ip = {{ hostvars[inventory_hostname]['ansible_host'] }}
+l2_population = true
+
+[securitygroup]
+enable_security_group = true
+firewall_driver = neutron.agent.linux.iptables_firewall.IptablesFirewallDriver

@@ -1,0 +1,6 @@
+---
+- hosts: all
+  order: inventory
+  tasks:
+    - name: test connection
+      shell: '$HOME/startup.sh'
