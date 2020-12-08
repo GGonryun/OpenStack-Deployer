@@ -1,3 +1,7 @@
+update:
+	git fetch -t -p
+	git pull origin main
+
 cluster:
 	ansible-playbook -i inventory cluster.yaml --ask-pass
 
