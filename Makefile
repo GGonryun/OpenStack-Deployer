@@ -3,11 +3,11 @@ update:
 	git pull origin main
 
 cluster:
-	ansible-playbook -i inventory util/gather-facts.yaml --ask-pass
-	ansible-playbook -i inventory cluster.yaml --ask-pass
+	ansible-playbook -i inventory util/gather-facts.yaml --extra-vars "ansible_ssh_pass=root"
+	ansible-playbook -i inventory cluster.yaml --extra-vars "ansible_ssh_pass=root"
 
 ping:
-	ansible-playbook -i inventory util/ping.yaml --ask-pass 
+	ansible-playbook -i inventory util/ping.yaml --extra-vars "ansible_ssh_pass=root"
 
 startup:
-	ansible-playbook -i inventory util/startup.yaml --ask-pass 
+	ansible-playbook -i inventory util/startup.yaml --extra-vars "ansible_ssh_pass=root"
