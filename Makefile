@@ -1,6 +1,7 @@
+BRANCH=main
 update:
 	git fetch -t -p
-	git pull origin main
+	git pull origin $(BRANCH)
 
 cluster:
 	ansible-playbook -i inventory util/gather-facts.yaml --extra-vars "ansible_ssh_pass=root"
