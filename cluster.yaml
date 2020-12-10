@@ -1,8 +1,8 @@
-- hosts: openstack
-  become: true
-  roles:
-    - role: common
-      tags: [ setup, shared ]
+# - hosts: openstack
+#   become: true
+#   roles:
+#     - role: common
+#       tags: [ setup, shared ]
    
 - hosts: computes
   become: true

@@ -1,0 +1,256 @@
+- name: 'install dependencies'
+  yum:
+    name:
+      - centos-release-openstack-train
+    state: present
+
+- name: Upgrade all packages
+  yum:
+    name: '*'
+    state: latest
+
+- name: 'install base packages'
+  yum:
+    name:
+      - python-openstackclient
+      - openstack-selinux
+      - ebtables 
+      - ipset
+    state: present
+  register: base_install
+
+- name: 'setup firewall'
+  block:
+    - shell: firewall-cmd --permanent --add-service=mysql
+    - shell: firewall-cmd --zone=public --permanent --add-port=4369/tcp --add-port=25672/tcp --add-port=5671-5672/tcp --add-port=15672/tcp  --add-port=61613-61614/tcp --add-port=1883/tcp --add-port=8883/tcp
+    - shell: firewall-cmd --new-zone=memcached --permanent
+    - shell: firewall-cmd --zone=memcached --add-port=11211/udp --permanent
+    - shell: firewall-cmd --zone=memcached --add-port=11211/tcp --permanent
+    - shell: firewall-cmd --zone=memcached --add-source=10.0.0.0/24 --permanent
+    - shell: firewall-cmd --zone=memcached --add-source=10.10.10.0/24 --permanent
+    - shell: firewall-cmd --add-port={2379,2380}/tcp --permanent
+    - shell: firewall-cmd --zone=public --add-port=5000/tcp --permanent
+    - shell: firewall-cmd --permanent --zone=public --add-service=http
+    - shell: firewall-cmd --permanent --zone=public --add-service=https
+    - shell: firewall-cmd --add-port=9292/tcp --permanent
+    - shell: firewall-cmd --add-port=9292/udp --permanent
+    - shell: firewall-cmd --add-port=8778/tcp --permanent
+    - shell: firewall-cmd --add-port={9696/tcp,9696/udp} --permanent
+    - shell: firewall-cmd --add-port={5902/tcp,5902/udp} --permanent
+    - shell: firewall-cmd --add-port={6080/tcp,6081/tcp,6082/tcp,8774/tcp,8775/tcp,8778/tcp} --permanent 
+    - shell: firewall-cmd --add-port={9696/tcp,9696/udp} --permanent 
+    - shell: firewall-cmd --add-port={68/tcp,68/udp} --permanent 
+    - shell: firewall-cmd --add-port=5900-5999/tcp --permanent
+    - shell: firewall-cmd --add-port=8776/tcp --permanent
+    - shell: setsebool -P nis_enabled 1
+    - shell: setsebool -P glance_api_can_network on 
+    - shell: semanage port -a -t http_port_t -p tcp 8778
+    - shell: semanage port -a -t http_port_t -p tcp 8774
+    - name: 'reload firewall'
+      shell: firewall-cmd --reload
+  when: base_install is changed
+
+- name: 'copy startup template'
+  template:
+    src: startup.sh.j2
+    dest: '~/startup.sh'
+    owner: root
+    group: root
+    mode: '0755'
+  register: startup_update
+
+- name: 'install chrony'
+  yum:
+    name:
+      - chrony
+    state: present
+  register: chrony_update
+
+- name: 'setup chrony'
+  block:
+    - name: 'copy chrony template'
+      template:
+        src: chrony.conf.j2
+        dest: /etc/chrony.conf
+    - name: 'restart chrony'
+      systemd:
+        name: chronyd
+        state: restarted
+        enabled: yes
+  when: chrony_update is changed
+
+- name: 'install mariadb'
+  yum:
+    name:
+      - mariadb 
+      - mariadb-server
+      - python2-PyMySQL
+      - rabbitmq-server
+    state: present
+  register: mysql_update
+
+- name: 'setup mariadb'
+  block:
+    - name: 'copy mysql template'
+      template:
+        src: openstack.conf.j2
+        dest: /etc/my.cnf.d/openstack.conf
+    - name: 'restart & enable mysql'
+      systemd:
+        name: mysql
+        state: restarted
+        enabled: yes
+    - name: Sets the root password 
+      mysql_user: user=root password="{{ mysql_root_password }}" host=localhost
+
+    - name: Deletes anonymous MySQL server user for ansible_fqdn
+      mysql_user: user="" host="{{ ansible_fqdn }}" state="absent"
+
+    - name: Deletes anonymous MySQL server user for localhost
+      mysql_user: user="" state="absent"
+
+    - name: Secures the MySQL root user for IPV6 localhost (::1)
+      mysql_user: user="root" password="{{ mysql_root_password }}" host="::1"
+
+    - name: Secures the MySQL root user for IPV4 localhost (127.0.0.1)
+      mysql_user: user="root" password="{{ mysql_root_password }}" host="127.0.0.1"
+
+    - name: Secures the MySQL root user for localhost domain (localhost)
+      mysql_user: user="root" password="{{ mysql_root_password }}" host="localhost"
+
+    - name: Secures the MySQL root user for server_hostname domain
+      mysql_user: user="root" password="{{ mysql_root_password }}" host="{{ ansible_fqdn }}"
+      
+    - name: Removes the MySQL test database
+      mysql_db: db=test state=absent
+  when: mysql_update is changed
+
+- name: 'install rabbitmq'
+  yum:
+    name:
+      - rabbitmq-server
+    state: present
+  register: installed_rabbitmq
+
+- name: 'setup rabbitmq':
+  block:
+    - name: 'restart & enable rabbitmq'
+      systemd:
+        name: rabbitmq-server.service
+        state: started
+        enabled: yes
+    - name: 'create rabbitmqctl user'
+      shell: "rabbitmqctl add_user openstack {{ rabbitmq_password }}"
+    - name: 'set rabbitmqctl user permissions'
+      shell: 'rabbitmqctl set_permissions openstack ".*" ".*" ".*"'
+  when: installed_rabbitmq
+
+- name: 'install memcached'
+  yum:
+    name:
+      - memcached 
+      - python-memcached
+    state: present
+  register: installed_memcached
+
+- name: 'setup memcached':
+  block:
+    - name: 'copy template'
+      src: memcached.j2
+      dest: /etc/sysconfig/memcached
+    - name: 'restart & enable memcached'
+      systemd:
+        name: memcached.service
+        state: started
+        enabled: yes
+  when: installed_memcached
+
+- name: 'install etcd'
+  yum:
+    name:
+      - etcd 
+    state: present
+  register: installed_etcd
+
+- name: 'setup memcached':
+  block:
+    - name: 'copy template'
+      src: etcd.conf.j2
+      dest: /etc/etcd/etcd.conf
+    - name: 'restart & enable etcd'
+      systemd:
+        name: etcd
+        state: started
+        enabled: yes
+  when: installed_etcd
+
+- name: 'create database'
+  community.mysql.mysql_query:
+    login_user: {{mysql_root_user}}
+    login_password: {{mysql_root_password}}
+    query: 
+      - CREATE DATABASE keystone;
+      - CREATE USER `keystone`@`localhost` IDENTIFIED BY 'pass';
+      - GRANT ALL ON keystone.* TO `keystone`@`localhost`;
+      - GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY 'pass';
+      - GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY 'pass';
+
+- name: 'install keystone'
+  yum:
+    name:
+      - openstack-keystone 
+      - mod_wsgi
+    state: present
+  register: install_keystone
+
+- name: 'setup keystone'
+  block:
+    - name: 'copy keystone conf'
+      src: keystone.conf.j2
+      dest: /etc/keystone/keystone.conf 
+    - name: 'sync db'
+      shell: 'su -s /bin/sh -c "keystone-manage db_sync" {{ keystone_username }}'
+    - name: 'setup fernet'
+      shell: "keystone-manage fernet_setup --keystone-user {{ keystone_username }} --keystone-group {{ keystone_username }}"
+    - name: 'setup keystone credentials'
+      shell: "keystone-manage credential_setup --keystone-user {{ keystone_username }} --keystone-group {{ keystone_username }}"
+    - name: 'bootstrap keystone' 
+      shell: keystone-manage bootstrap --bootstrap-password {{ admin_password }} --bootstrap-admin-url http://{{ hostvars[inventory_hostname]['ansible_facts']['hostname'] }}:5000/v3/ --bootstrap-internal-url http://{{ hostvars[inventory_hostname]['ansible_facts']['hostname'] }}:5000/v3/ --bootstrap-public-url http://{{ hostvars[inventory_hostname]['ansible_facts']['hostname'] }}:5000/v3/ --bootstrap-region-id RegionOne
+    - name: 'setup httpd'
+      src: httpd.conf.j2
+      dest: /etc/httpd/conf/httpd.conf
+    - name: 'create link'
+      shell: "ln -s /usr/share/keystone/wsgi-keystone.conf /etc/httpd/conf.d/"
+  when: install_keystone
+
+- name: 'install keystone'
+  yum:
+    name:
+      - httpd 
+    state: present
+  register: install_httpd
+
+- name: 'setup keystone'
+  block:
+    - name: 'copy httpd config'
+      src: httpd.conf.j2
+      dest: /etc/httpd/conf/httpd.conf
+    - name: 'create config link'
+      shell: "ln -s /usr/share/keystone/wsgi-keystone.conf /etc/httpd/conf.d/"
+    - name: 'restart & enable httpd'
+      systemd:
+        name: httpd
+        state: restarted
+        enabled: yes
+  when: install_httpd
+
+- name: 'copy admin script'
+  template:
+    src: admin.sh.j2
+    dest: ~/admin.sh
+    mode: '0700'
+  register: copy_admin_script
+
+- name: add to startup
+  shell: echo "source ~/admin.sh " >> ~/.bash_profile
+  when: copy_admin_script is changed

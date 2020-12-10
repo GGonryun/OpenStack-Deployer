@@ -3,6 +3,7 @@ update:
 	git pull origin main
 
 cluster:
+	ansible-playbook -i inventory util/gather-facts.yaml --ask-pass
 	ansible-playbook -i inventory cluster.yaml --ask-pass
 
 ping:
