@@ -1,5 +1,4 @@
 [openstack]
-logging ansible_host=10.10.10.12 provider_network_ip=192.168.128.12 
 controller ansible_host=10.10.10.18 provider_network_ip=192.168.128.18 
 block1 ansible_host=10.10.10.14 provider_network_ip=192.168.128.14
 compute1 ansible_host=10.10.10.11 provider_network_ip=192.168.128.11 physical_interface=em1
@@ -10,6 +9,11 @@ compute5 ansible_host=10.10.10.19 provider_network_ip=192.168.128.19 physical_in
 compute6 ansible_host=10.10.10.67 provider_network_ip=192.168.128.67 physical_interface=em2
 
 [computes]
+compute1
+compute2
+compute3
+compute4
+compute5
 compute6
 
 [controllers]

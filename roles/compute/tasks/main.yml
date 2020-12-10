@@ -34,7 +34,6 @@
     mode: '0755'
   register: startup_update
 
-
 - name: 'copy chrony template'
   template:
     src: chrony.conf.j2
