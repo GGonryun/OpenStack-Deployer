@@ -2,5 +2,5 @@
 - hosts: all
   order: inventory
   tasks:
-    - name: test connection
+    - name: 'run startup'
       shell: '$HOME/startup.sh'

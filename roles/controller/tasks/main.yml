@@ -52,7 +52,8 @@
 
 - name: 'copy startup template'
   template:
-    src: startup.sh.j2
+    backup: yes
+    src: utility/startup.sh.j2
     dest: '~/startup.sh'
     owner: root
     group: root
@@ -70,7 +71,8 @@
   block:
     - name: 'copy chrony template'
       template:
-        src: chrony.conf.j2
+        backup: yes
+        src: common/chrony.conf.j2
         dest: /etc/chrony.conf
     - name: 'restart chrony'
       systemd:
@@ -93,7 +95,8 @@
   block:
     - name: 'copy mysql template'
       template:
-        src: openstack.conf.j2
+        backup: yes
+        src: common/openstack.conf.j2
         dest: /etc/my.cnf.d/openstack.conf
     - name: 'restart & enable mysql'
       systemd:
@@ -156,8 +159,10 @@
 - name: 'setup memcached':
   block:
     - name: 'copy template'
-      src: memcached.j2
-      dest: /etc/sysconfig/memcached
+      template:
+        backup: yes
+        src: common/memcached.j2
+        dest: /etc/sysconfig/memcached
     - name: 'restart & enable memcached'
       systemd:
         name: memcached.service
@@ -172,28 +177,19 @@
     state: present
   register: installed_etcd
 
-- name: 'setup memcached':
+- name: 'setup etcd':
   block:
     - name: 'copy template'
-      src: etcd.conf.j2
-      dest: /etc/etcd/etcd.conf
+      template:
+        backup: yes
+        src: common/etcd.conf.j2
+        dest: /etc/etcd/etcd.conf
     - name: 'restart & enable etcd'
       systemd:
         name: etcd
         state: started
         enabled: yes
   when: installed_etcd
-
-- name: 'create database'
-  community.mysql.mysql_query:
-    login_user: {{mysql_root_user}}
-    login_password: {{mysql_root_password}}
-    query: 
-      - CREATE DATABASE keystone;
-      - CREATE USER `keystone`@`localhost` IDENTIFIED BY 'pass';
-      - GRANT ALL ON keystone.* TO `keystone`@`localhost`;
-      - GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY 'pass';
-      - GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY 'pass';
 
 - name: 'install keystone'
   yum:
@@ -205,9 +201,21 @@
 
 - name: 'setup keystone'
   block:
+    - name: 'create database'
+      community.mysql.mysql_query:
+        login_user: "{{mysql_root_user}}"
+        login_password: "{{mysql_root_password}}"
+        query: 
+          - "CREATE DATABASE keystone;"
+          - "CREATE USER `keystone`@`localhost` IDENTIFIED BY '{{mysql_root_password}}';"
+          - "GRANT ALL ON keystone.* TO `keystone`@`localhost`;"
+          - "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY '{{mysql_root_password}}';"
+          - "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY '{{mysql_root_password}}';"
     - name: 'copy keystone conf'
-      src: keystone.conf.j2
-      dest: /etc/keystone/keystone.conf 
+      template:
+        backup: yes
+        src: keystone/keystone.conf.j2
+        dest: /etc/keystone/keystone.conf 
     - name: 'sync db'
       shell: 'su -s /bin/sh -c "keystone-manage db_sync" {{ keystone_username }}'
     - name: 'setup fernet'
@@ -215,42 +223,438 @@
     - name: 'setup keystone credentials'
       shell: "keystone-manage credential_setup --keystone-user {{ keystone_username }} --keystone-group {{ keystone_username }}"
     - name: 'bootstrap keystone' 
-      shell: keystone-manage bootstrap --bootstrap-password {{ admin_password }} --bootstrap-admin-url http://{{ hostvars[inventory_hostname]['ansible_facts']['hostname'] }}:5000/v3/ --bootstrap-internal-url http://{{ hostvars[inventory_hostname]['ansible_facts']['hostname'] }}:5000/v3/ --bootstrap-public-url http://{{ hostvars[inventory_hostname]['ansible_facts']['hostname'] }}:5000/v3/ --bootstrap-region-id RegionOne
-    - name: 'setup httpd'
-      src: httpd.conf.j2
-      dest: /etc/httpd/conf/httpd.conf
-    - name: 'create link'
-      shell: "ln -s /usr/share/keystone/wsgi-keystone.conf /etc/httpd/conf.d/"
+      shell: keystone-manage bootstrap --bootstrap-password {{ admin_password }} --bootstrap-admin-url http://{{ inventory_hostname }}:5000/v3/ --bootstrap-internal-url http://{{ inventory_hostname }}:5000/v3/ --bootstrap-public-url http://{{ inventory_hostname }}:5000/v3/ --bootstrap-region-id RegionOne
   when: install_keystone
 
-- name: 'install keystone'
+- name: 'install httpd'
   yum:
     name:
       - httpd 
     state: present
   register: install_httpd
 
-- name: 'setup keystone'
+- name: 'setup httpd'
   block:
     - name: 'copy httpd config'
-      src: httpd.conf.j2
-      dest: /etc/httpd/conf/httpd.conf
+      template:
+        backup:
+        src: common/httpd.conf.j2
+        dest: /etc/httpd/conf/httpd.conf
     - name: 'create config link'
       shell: "ln -s /usr/share/keystone/wsgi-keystone.conf /etc/httpd/conf.d/"
     - name: 'restart & enable httpd'
       systemd:
         name: httpd
-        state: restarted
+        state: started
         enabled: yes
   when: install_httpd
 
 - name: 'copy admin script'
   template:
-    src: admin.sh.j2
+    backup: yes
+    src: utility/admin.sh.j2
     dest: ~/admin.sh
     mode: '0700'
   register: copy_admin_script
 
-- name: add to startup
+- name: 'add to startup'
   shell: echo "source ~/admin.sh " >> ~/.bash_profile
   when: copy_admin_script is changed
+
+- name: 'install glance'
+  yum:
+    name:
+      - openstack-glance 
+    state: present
+  register: install_glance
+
+- name: 'setup glance'
+  block:
+    - name: 'create database'
+      community.mysql.mysql_query:
+        login_user: "{{mysql_root_user}}"
+        login_password: "{{mysql_root_password}}"
+        query: 
+          - "CREATE DATABASE glance;"
+          - "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY '{{glance_password}}';"
+          - "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY '{glance_password}';"
+    - name: 'create project'
+      shell: |
+        source ~/admin.sh 
+        openstack project create --domain default --description "Service Project" service
+        openstack user create --domain default --password {{glance_password}} {{glance_username}}
+        openstack role add --project service --user {{glance_username}} admin
+        openstack service create --name {{glance_username}} --description "OpenStack Image" image
+        openstack endpoint create --region RegionOne image public http://{{ inventory_hostname }}:9292
+        openstack endpoint create --region RegionOne image internal http://{{ inventory_hostname }}:9292
+        openstack endpoint create --region RegionOne image admin http://{{ inventory_hostname }}:9292 
+    - name: 'copy conf'
+      template:
+        backup: yes
+        src: glance/glance-api.conf.j2
+        dest: /etc/glance/glance-api.conf 
+    - name: 'sync db'
+      shell: 'su -s /bin/sh -c "glance-manage db_sync" {{ glance_username }}'
+    - name: 'restart & enable glance'
+      systemd:
+        name: openstack-glance-api.service
+        state: started
+        enabled: yes
+  when: install_glance
+
+- name: 'install placement'
+  yum:
+    name:
+      - openstack-placement-api 
+    state: present
+  register: install_placement
+
+- name: 'setup placement'
+  block:
+    - name: 'create database'
+      community.mysql.mysql_query:
+        login_user: "{{mysql_root_user}}"
+        login_password: "{{mysql_root_password}}"
+        query: 
+          - "CREATE DATABASE {{glance_username}};"
+          - "GRANT ALL PRIVILEGES ON {{placement_username}}.* TO '{{placement_username}}'@'localhost' IDENTIFIED BY '{{placement_password}}';"
+          - "GRANT ALL PRIVILEGES ON {{placement_username}}.* TO '{{placement_username}}'@'%' IDENTIFIED BY '{{placement_password}}';"
+    - name: 'create project'
+      shell: |
+        source ~/admin.sh 
+        openstack user create --domain default --password {{placement_password}} {{placement_username}}
+        openstack role add --project service --user {{placement_username}} admin
+        openstack service create --name {{placement_username}} --description "Placement API" placement
+        openstack endpoint create --region RegionOne placement public http://{{ inventory_hostname }}:8778
+        openstack endpoint create --region RegionOne placement internal http://{{ inventory_hostname }}:8778
+        openstack endpoint create --region RegionOne placement admin http://{{ inventory_hostname }}:8778 
+    - name: 'copy service conf'
+      template:
+        backup: yes
+        src: placement/placement.conf.j2
+        dest: /etc/placement/placement.conf
+    - name: 'copy http conf'
+      template:
+        backup: yes
+        src: placement/00-placement-api.conf.j2
+        dest: /etc/httpd/conf.d/00-placement-api.conf
+    - name: 'sync db'
+      shell: 'su -s /bin/sh -c "placement-manage db sync" {{placement_username}}'
+    - name: 'restart httpd'
+      systemd:
+        name: httpd
+        state: restarted
+  when: install_placement
+
+  - name: 'install glance'
+  yum:
+    name:
+      - openstack-glance 
+    state: present
+  register: install_glance
+
+- name: 'install nova'
+  yum:
+    name:
+      - openstack-nova-api 
+      - openstack-nova-conductor
+      - openstack-nova-novncproxy 
+      - openstack-nova-scheduler
+    state: present
+  register: install_nova
+
+- name: 'setup nova'
+  block:
+    - name: 'create database'
+      community.mysql.mysql_query:
+        login_user: "{{mysql_root_user}}"
+        login_password: "{{mysql_root_password}}"
+        query: 
+          - "CREATE DATABASE nova_api;"
+          - "CREATE DATABASE nova;"
+          - "CREATE DATABASE nova_cell0;"
+          - "GRANT ALL PRIVILEGES ON nova_api.* TO '{{nova_username}}'@'localhost' IDENTIFIED BY '{{nova_password}}';"
+          - "GRANT ALL PRIVILEGES ON nova_api.* TO '{{nova_username}}'@'%' IDENTIFIED BY '{{nova_password}}';"
+          - "GRANT ALL PRIVILEGES ON nova.* TO '{{nova_username}}'@'localhost' IDENTIFIED BY '{{nova_password}}';"
+          - "GRANT ALL PRIVILEGES ON nova.* TO '{{nova_username}}'@'%'IDENTIFIED BY '{{nova_password}}';"
+          - "GRANT ALL PRIVILEGES ON nova_cell0.* TO '{{nova_username}}'@'localhost' IDENTIFIED BY '{{nova_password}}';"
+          - "GRANT ALL PRIVILEGES ON nova_cell0.* TO '{{nova_username}}'@'%' IDENTIFIED BY '{{nova_password}}';"
+    - name: 'create project'
+      shell: |
+        source ~/admin.sh 
+        openstack user create --domain default --password {{nova_password}} {{nova_username}}
+        openstack role add --project service --user {{nova_username}} admin
+        openstack service create --name {{nova_username}} --description "OpenStack Compute" compute
+        openstack endpoint create --region RegionOne compute public http://{{ inventory_hostname }}:8774/v2.1
+        openstack endpoint create --region RegionOne compute internal http://{{ inventory_hostname }}:8774/v2.1
+        openstack endpoint create --region RegionOne compute admin http://{{ inventory_hostname }}:8774/v2.1 
+    - name: 'copy conf'
+      template:
+        backup: yes
+        src: nova/nova.conf.j2
+        dest: /etc/nova/nova.conf
+    - name: 'sync db'
+      shell: |
+        su -s /bin/sh -c "nova-manage api_db sync" {{nova_username}}
+        su -s /bin/sh -c "nova-manage cell_v2 map_cell0" {{nova_username}}
+        su -s /bin/sh -c "nova-manage cell_v2 create_cell --name=cell1 --verbose" {{nova_username}}
+        su -s /bin/sh -c "nova-manage db sync" {{nova_username}}
+        su -s /bin/sh -c "nova-manage cell_v2 list_cells" {{nova_username}}
+    - name: 'start & enable nova api'
+      systemd:
+        name: openstack-nova-api.service
+        state: started
+        enabled: yes
+    - name: 'start & enable nova scheduler'
+      systemd:
+        name:  openstack-nova-scheduler.service
+        state: started
+        enabled: yes
+    - name: 'start & enable nova conductor'
+      systemd:
+        name: openstack-nova-conductor.service
+        state: started
+        enabled: yes
+    - name: 'restart & enable nonvc proxy'
+      systemd:
+        name: openstack-nova-novncproxy.service
+        state: started
+        enabled: yes
+    - name: 'discover compute hosts'
+      shell: 'su -s /bin/sh -c "nova-manage cell_v2 discover_hosts --verbose" nova'
+  when: install_nova
+
+- name: 'install neutron'
+  yum:
+    name:
+      - openstack-neutron 
+      - openstack-neutron-ml2
+      - openstack-neutron-linuxbridge 
+      - ebtables
+    state: present
+  register: install_neutron
+
+- name: 'setup neutron'
+  block:
+    - name: 'create database'
+      community.mysql.mysql_query:
+        login_user: "{{mysql_root_user}}"
+        login_password: "{{mysql_root_password}}"
+        query: 
+          - "CREATE DATABASE {{neutron_username}};"
+          - "GRANT ALL PRIVILEGES ON neutron.* TO '{{neutron_username}}'@'localhost' IDENTIFIED BY '{{neutron_password}}';"
+          - "GRANT ALL PRIVILEGES ON neutron.* TO '{{neutron_username}}'@'%' IDENTIFIED BY '{{neutron_password}}';"
+    - name: 'create project'
+      shell: |
+        source ~/admin.sh 
+        openstack user create --domain default --password {{neutron_username}} {{neutron_password}}
+        openstack role add --project service --user {{neutron_username}} admin
+        openstack service create --name {{nova_username}} --description "OpenStack Networking" network
+        openstack endpoint create --region RegionOne network public http://{{ inventory_hostname }}:9696
+        openstack endpoint create --region RegionOne network internal http://{{ inventory_hostname }}:9696
+        openstack endpoint create --region RegionOne network admin http://{{ inventory_hostname }}:9696
+    - name: 'copy service conf'
+      template:
+        backup: yes
+        src: neutron/neutron.conf.j2
+        dest: /etc/neutron/neutron.conf
+    - name: 'copy ml2 conf'
+      template:
+        backup: yes
+        src: neutron/ml2_conf.ini.j2
+        dest:  /etc/neutron/plugins/ml2/ml2_conf.ini
+    - name: 'copy linuxbridge conf'
+      template:
+        backup: yes
+        src: neutron/linuxbridge_agent.ini.j2
+        dest: /etc/neutron/plugins/ml2/linuxbridge_agent.ini
+    - name: 'copy l3 conf'
+      template:
+        backup: yes
+        src: neutron/l3_agent.ini.j2
+        dest: /etc/neutron/l3_agent.ini
+    - name: 'copy dhcp conf'
+      template:
+        backup: yes
+        src:  neutron/dhcp_agent.ini.j2
+        dest: /etc/neutron/dhcp_agent.ini
+    - name: 'copy metadata conf'
+      template:
+        backup: yes
+        src: neutron/metadata_agent.ini.j2
+        dest: /etc/neutron/metadata_agent.ini 
+    - name: 'symbolic link'
+      shell: ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
+    - name: 'sync db'
+      shell: 'su -s /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" {{ neutron_username }}'
+    - name: 'start & enable service'
+      systemd:
+        name: neutron-server.service
+        state: started
+        enabled: yes
+    - name: 'start & enable linuxbridge agent'
+      systemd:
+        name:   neutron-linuxbridge-agent.service
+        state: started
+        enabled: yes
+    - name: 'start & enable dhcp agent'
+      systemd:
+        name: neutron-dhcp-agent.service
+        state: started
+        enabled: yes
+    - name: 'restart & enable metadata agent'
+      systemd:
+        name: neutron-metadata-agent.service
+        state: started
+        enabled: yes
+    - name: 'restart & enable l3 agent'
+      systemd:
+        name: neutron-l3-agent.service
+        state: started
+        enabled: yes
+    - name: 'discover compute hosts'
+      shell: 'su -s /bin/sh -c "nova-manage cell_v2 discover_hosts --verbose" nova'
+  when: install_neutron
+
+- name: 'install horizon'
+  yum:
+    name:
+      - openstack-dashboard
+    state: present
+  register: install_horizon
+
+- name: 'setup horizon'
+  block:
+    - name: 'copy local settings'
+      template:
+        backup: yes
+        src: horizon/local_settings.j2
+        dest: /etc/openstack-dashboard/local_settings
+    - name: 'copy ml2 conf'
+      template:
+        backup: yes
+        src: horizon/openstack-dashboard.conf.j2
+        dest: /etc/httpd/conf.d/openstack-dashboard.conf
+    - name: 'copy bsoe img'
+      copy:
+        src: horizon/images/bsoe.png
+        dest: /usr/share/openstack-dashboard/static/dashboard/img/bsoe.png
+    - name: 'copy ccet img'
+      copy:
+        src: horizon/images/ccet.png
+        dest: /usr/share/openstack-dashboard/static/dashboard/img/ccet.png
+    - name: 'copy favicon'
+      copy:
+        backup: true
+        src: horizon/images/favicon.ico
+        dest: /usr/share/openstack-dashboard/static/dashboard/img/favico.icon  
+    - name: 'copy base html file'
+      copy: 
+        backup: true
+        src: horizon/html/base.html
+        dest: /usr/share/openstack-dashboard/openstack_dashboard/templates/base.html
+    - name: 'copy dev.base html file'
+      copy: 
+        src: horizon/html/dev.base.html
+        dest: /usr/share/openstack-dashboard/openstack_dashboard/templates/dev.base.html
+    - name: 'copy prod.base html file'
+      copy: 
+        src: horizon/html/prod.base.html
+        dest: /usr/share/openstack-dashboard/openstack_dashboard/templates/prod.base.html
+    - name: 'copy header brand'
+      copy:
+        backup: true
+        src: horizon/html/_brand.html
+        dest: /usr/share/openstack-dashboard/openstack_dashboard/templates/header/_brand.html
+    - name: 'copy splash screen'
+      copy:
+        backup: true
+        src: horizon/html/_splash.html
+        dest: /usr/share/openstack-dashboard/openstack_dashboard/templates/auth/_splash.html
+    - name: 'copy stylesheets'
+      copy:
+        backup: true
+        src: horizon/html/_stylesheets.html
+        dest: /usr/share/openstack-dashboard/openstack_dashboard/templates/_stylesheets.html
+    - name: 'copy active maintenance script'
+      copy:
+        backup: true
+        src: horizon/script/active-maintenance-toggle.sh
+        dest: ~/active_maintenance-toggle.sh
+        owner: root
+        group: root
+        mode: '0755'
+    - name: 'restart http'
+      systemd:
+        name: httpd
+        state: restarted
+  when: install_horizon
+
+- name: 'install cinder'
+  yum:
+    name:
+      - openstack-cinder
+    state: present
+  register: install_cinder
+
+- name: 'setup cinder'
+  block:
+    - name: 'create database'
+      community.mysql.mysql_query:
+        login_user: "{{mysql_root_user}}"
+        login_password: "{{mysql_root_password}}"
+        query: 
+          - "CREATE DATABASE {{cinder_username}};"
+          - "GRANT ALL PRIVILEGES ON cinder.* TO '{{cinder_username}}'@'localhost' IDENTIFIED BY '{{cinder_password}}';"
+          - "GRANT ALL PRIVILEGES ON cinder.* TO '{{cinder_username}}'@'%' IDENTIFIED BY '{{cinder_password}}';"
+    - name: 'create project'
+      shell: |
+        source ~/admin.sh 
+        openstack user create --domain default --password {{cinder_username}} {{cinder_password}}
+        openstack role add --project service --user {{cinder_username}} admin
+        openstack service create --name cinderv2 --description "OpenStack Block Storage" volumev2
+        openstack service create --name cinderv3 --description "OpenStack Block Storage" volumev3
+        openstack endpoint create --region RegionOne volumev2 public http://controller:8776/v2/%\(project_id\)s
+        openstack endpoint create --region RegionOne volumev2 internal http://controller:8776/v2/%\(project_id\)s
+        openstack endpoint create --region RegionOne volumev2 admin http://controller:8776/v2/%\(project_id\)s
+        openstack endpoint create --region RegionOne volumev3 public http://controller:8776/v3/%\(project_id\)s
+        openstack endpoint create --region RegionOne volumev3 internal http://controller:8776/v3/%\(project_id\)s
+        openstack endpoint create --region RegionOne volumev3 admin http://controller:8776/v3/%\(project_id\)s
+    - name: 'copy service conf'
+      template:
+        backup: yes
+        src: cinder/cinder.conf.j2
+        dest: /etc/cinder/cinder.conf
+    - name: 'sync db'
+      shell: 'su -s /bin/sh -c "cinder-manage db sync" {{cinder_username}}'
+    - name: 'restart nova'
+      systemd:
+        name:  openstack-nova-api.service
+        state: restarted
+        enabled: yes
+    - name: 'start & enable api'
+      systemd:
+        name:  openstack-cinder-api.service
+        state: started
+        enabled: yes
+    - name: 'start & enable scheduler'
+      systemd:
+        name: openstack-cinder-scheduler.service
+        state: started
+        enabled: yes
+  
+  
+  
+    - name: 'restart & enable metadata agent'
+      systemd:
+        name: neutron-metadata-agent.service
+        state: started
+        enabled: yes
+    - name: 'restart & enable l3 agent'
+      systemd:
+        name: neutron-l3-agent.service
+        state: started
+        enabled: yes
+    - name: 'discover compute hosts'
+      shell: 'su -s /bin/sh -c "nova-manage cell_v2 discover_hosts --verbose" nova'
+  when: install_neutron

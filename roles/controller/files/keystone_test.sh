@@ -6,7 +6,6 @@ testrole='myrole'
 source ~/admin.sh 
 
 openstack domain create --description "An Example Domain" example
-openstack project create --domain default --description "Service Project" service
 openstack project create --domain default --description "Demo Project" $testproject
 openstack user create --domain default --password $testpassword $testusername
 openstack role create testrole
