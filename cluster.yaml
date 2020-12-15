@@ -4,8 +4,20 @@
 #     - role: common
 #       tags: [ setup, shared ]
    
+# - hosts: controllers
+#   become: true
+#   roles:
+#     - role: controller
+#       tags: [controller]
+
 - hosts: computes
   become: true
   roles:
     - role: compute
       tags: [ compute ]
+
+# - hosts: blocks
+#   become: true
+#   roles:
+#     - role: block
+#       tags: [ block ]
