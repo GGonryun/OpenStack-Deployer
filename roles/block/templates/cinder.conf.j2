@@ -1,0 +1,29 @@
+[DEFAULT]
+transport_url = rabbit://openstack:{{rabbitmq_password}}@{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}
+auth_strategy = keystone
+my_ip = {{ hostvars[inventory_hostname]['ansible_host'] }}
+enabled_backends = lvm
+glance_api_servers = http://{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}:9292
+
+[database]
+connection = mysql+pymysql://cinder:{{cinder_password}}@{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}/cinder
+
+[keystone_authtoken]
+www_authenticate_uri = http://{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}:5000
+auth_url = http://{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}:5000
+memcached_servers = {{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}:11211
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+project_name = service
+username = cinder
+password = {{ cinder_password }}
+
+[lvm]
+volume_driver = cinder.volume.drivers.lvm.LVMVolumeDriver
+volume_group = cinder-volumes
+target_protocol = iscsi
+target_helper = lioadm
+
+[oslo_concurrency]
+lock_path = /var/lib/cinder/tmp

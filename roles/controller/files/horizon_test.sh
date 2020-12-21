@@ -1,0 +1,1 @@
+curl -I -L -X get http://192.168.128.77/dashboard/auth/login

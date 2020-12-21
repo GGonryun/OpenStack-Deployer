@@ -3,11 +3,15 @@
     name:
       - centos-release-openstack-train
     state: present
+  tags:
+    - basic
 
-- name: Upgrade all packages
+- name: 'Upgrade all packages'
   yum:
     name: '*'
     state: latest
+  tags:
+    - basic
 
 - name: 'install base packages'
   yum:
@@ -18,12 +22,32 @@
       - ipset
     state: present
   register: base_install
+  tags:
+    - basic
+
+- name: 'install firewalld'
+  yum:
+    name: 
+      - firewalld
+    state: present
+  register: firewalld_install
+  tags:
+    - basic
+    - firewall
 
 - name: 'setup firewall'
   block:
+    - name: 'enable firewalld'
+      systemd:
+        name: firewalld
+        state: started
+        enabled: yes
     - shell: firewall-cmd --permanent --add-service=mysql
     - shell: firewall-cmd --zone=public --permanent --add-port=4369/tcp --add-port=25672/tcp --add-port=5671-5672/tcp --add-port=15672/tcp  --add-port=61613-61614/tcp --add-port=1883/tcp --add-port=8883/tcp
+      # TODO: the memcached zone might already exist, running the teardown 
+      # script will remove this but it is not truely idempotent yet.
     - shell: firewall-cmd --new-zone=memcached --permanent
+      ignore_errors: True
     - shell: firewall-cmd --zone=memcached --add-port=11211/udp --permanent
     - shell: firewall-cmd --zone=memcached --add-port=11211/tcp --permanent
     - shell: firewall-cmd --zone=memcached --add-source=10.0.0.0/24 --permanent
@@ -37,19 +61,26 @@
     - shell: firewall-cmd --add-port=8778/tcp --permanent
     - shell: firewall-cmd --add-port={9696/tcp,9696/udp} --permanent
     - shell: firewall-cmd --add-port={5902/tcp,5902/udp} --permanent
-    - shell: firewall-cmd --add-port={6080/tcp,6081/tcp,6082/tcp,8774/tcp,8775/tcp,8778/tcp} --permanent 
+    - shell: firewall-cmd --add-port={6080/tcp,6081/tcp,6082/tcp,8775/tcp,8778/tcp} --permanent 
     - shell: firewall-cmd --add-port={9696/tcp,9696/udp} --permanent 
     - shell: firewall-cmd --add-port={68/tcp,68/udp} --permanent 
     - shell: firewall-cmd --add-port=5900-5999/tcp --permanent
     - shell: firewall-cmd --add-port=8776/tcp --permanent
     - shell: setsebool -P nis_enabled 1
     - shell: setsebool -P glance_api_can_network on 
+      # TODO: the two semanage commands may already have been
+      # run previously and are not truely idempotent.
     - shell: semanage port -a -t http_port_t -p tcp 8778
+      ignore_errors: True
     - shell: semanage port -a -t http_port_t -p tcp 8774
+      ignore_errors: True
     - name: 'reload firewall'
       shell: firewall-cmd --reload
-  when: base_install is changed
-
+  when: (firewalld_install is changed) and (base_install is changed)
+  tags:
+    - basic
+    - firewall
+    
 - name: 'copy startup template'
   template:
     backup: yes
@@ -59,6 +90,9 @@
     group: root
     mode: '0755'
   register: startup_update
+  tags:
+    - basic
+    - startup
 
 - name: 'install chrony'
   yum:
@@ -66,6 +100,9 @@
       - chrony
     state: present
   register: chrony_update
+  tags:
+    - basic
+    - chrony
 
 - name: 'setup chrony'
   block:
@@ -80,53 +117,9 @@
         state: restarted
         enabled: yes
   when: chrony_update is changed
-
-- name: 'install mariadb'
-  yum:
-    name:
-      - mariadb 
-      - mariadb-server
-      - python2-PyMySQL
-      - rabbitmq-server
-    state: present
-  register: mysql_update
-
-- name: 'setup mariadb'
-  block:
-    - name: 'copy mysql template'
-      template:
-        backup: yes
-        src: common/openstack.conf.j2
-        dest: /etc/my.cnf.d/openstack.conf
-    - name: 'restart & enable mysql'
-      systemd:
-        name: mysql
-        state: restarted
-        enabled: yes
-    - name: Sets the root password 
-      mysql_user: user=root password="{{ mysql_root_password }}" host=localhost
-
-    - name: Deletes anonymous MySQL server user for ansible_fqdn
-      mysql_user: user="" host="{{ ansible_fqdn }}" state="absent"
-
-    - name: Deletes anonymous MySQL server user for localhost
-      mysql_user: user="" state="absent"
-
-    - name: Secures the MySQL root user for IPV6 localhost (::1)
-      mysql_user: user="root" password="{{ mysql_root_password }}" host="::1"
-
-    - name: Secures the MySQL root user for IPV4 localhost (127.0.0.1)
-      mysql_user: user="root" password="{{ mysql_root_password }}" host="127.0.0.1"
-
-    - name: Secures the MySQL root user for localhost domain (localhost)
-      mysql_user: user="root" password="{{ mysql_root_password }}" host="localhost"
-
-    - name: Secures the MySQL root user for server_hostname domain
-      mysql_user: user="root" password="{{ mysql_root_password }}" host="{{ ansible_fqdn }}"
-      
-    - name: Removes the MySQL test database
-      mysql_db: db=test state=absent
-  when: mysql_update is changed
+  tags:
+    - basic
+    - chrony
 
 - name: 'install rabbitmq'
   yum:
@@ -134,19 +127,28 @@
       - rabbitmq-server
     state: present
   register: installed_rabbitmq
+  tags:
+    - basic
+    - rabbitmq
 
-- name: 'setup rabbitmq':
+- name: 'setup rabbitmq'
   block:
     - name: 'restart & enable rabbitmq'
       systemd:
         name: rabbitmq-server.service
         state: started
         enabled: yes
+    # TODO: Investigate why the teardown scripts fail to delete the user.
     - name: 'create rabbitmqctl user'
       shell: "rabbitmqctl add_user openstack {{ rabbitmq_password }}"
+      ignore_errors: True
     - name: 'set rabbitmqctl user permissions'
+      ignore_errors: True
       shell: 'rabbitmqctl set_permissions openstack ".*" ".*" ".*"'
-  when: installed_rabbitmq
+  when: installed_rabbitmq is changed
+  tags:
+    - basic
+    - rabbitmq
 
 - name: 'install memcached'
   yum:
@@ -155,8 +157,11 @@
       - python-memcached
     state: present
   register: installed_memcached
+  tags:
+    - basic
+    - memcached
 
-- name: 'setup memcached':
+- name: 'setup memcached'
   block:
     - name: 'copy template'
       template:
@@ -168,7 +173,10 @@
         name: memcached.service
         state: started
         enabled: yes
-  when: installed_memcached
+  when: installed_memcached is changed
+  tags:
+    - basic
+    - memcached
 
 - name: 'install etcd'
   yum:
@@ -176,8 +184,11 @@
       - etcd 
     state: present
   register: installed_etcd
+  tags:
+    - basic
+    - etcd
 
-- name: 'setup etcd':
+- name: 'setup etcd'
   block:
     - name: 'copy template'
       template:
@@ -189,7 +200,54 @@
         name: etcd
         state: started
         enabled: yes
-  when: installed_etcd
+  when: installed_etcd is changed
+  tags:
+    - basic
+    - etcd
+
+- name: 'install mariadb'
+  yum:
+    name:
+      - mariadb 
+      - mariadb-server
+      - python2-PyMySQL
+      - rabbitmq-server
+    state: present
+  register: install_mysql
+  tags:
+    - mariadb
+
+- name: 'setup mariadb'
+  block:
+    - name: 'copy mysql template'
+      template:
+        backup: yes
+        src: common/openstack.conf.j2
+        dest: /etc/my.cnf.d/openstack.conf
+    - name: 'restart & enable mysql'
+      systemd:
+        name: mariadb.service
+        state: restarted
+        enabled: yes
+    - name: Sets the root password 
+      mysql_user: 
+        name: "root"
+        login_unix_socket:  /var/lib/mysql/mysql.sock
+        password: "{{ mysql_root_password }}"
+        priv: '*.*:ALL,GRANT'
+        host: 'localhost'
+        state: present
+    - name: 'copy mysql creds'
+      template:
+        backup: yes
+        src: common/.my.cnf.j2
+        dest: /root/.my.cnf
+        owner: root
+        mode: 0600
+
+  when: install_mysql is changed
+  tags:
+    - mariadb
 
 - name: 'install keystone'
   yum:
@@ -198,33 +256,57 @@
       - mod_wsgi
     state: present
   register: install_keystone
+  tags: 
+    - openstack
+    - keystone
 
 - name: 'setup keystone'
   block:
     - name: 'create database'
       community.mysql.mysql_query:
-        login_user: "{{mysql_root_user}}"
-        login_password: "{{mysql_root_password}}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
         query: 
           - "CREATE DATABASE keystone;"
-          - "CREATE USER `keystone`@`localhost` IDENTIFIED BY '{{mysql_root_password}}';"
+          - "CREATE USER `keystone`@`localhost` IDENTIFIED BY '{{keystone_password}}';"
           - "GRANT ALL ON keystone.* TO `keystone`@`localhost`;"
-          - "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY '{{mysql_root_password}}';"
-          - "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY '{{mysql_root_password}}';"
+          - "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY '{{keystone_password}}';"
+          - "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY '{{keystone_password}}';"
     - name: 'copy keystone conf'
       template:
         backup: yes
         src: keystone/keystone.conf.j2
         dest: /etc/keystone/keystone.conf 
     - name: 'sync db'
-      shell: 'su -s /bin/sh -c "keystone-manage db_sync" {{ keystone_username }}'
+      become: keystone
+      shell: '/bin/sh -c "keystone-manage db_sync"'
+      ignore_errors: True
     - name: 'setup fernet'
-      shell: "keystone-manage fernet_setup --keystone-user {{ keystone_username }} --keystone-group {{ keystone_username }}"
+      shell: "keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone"
     - name: 'setup keystone credentials'
-      shell: "keystone-manage credential_setup --keystone-user {{ keystone_username }} --keystone-group {{ keystone_username }}"
+      shell: "keystone-manage credential_setup --keystone-user keystone --keystone-group keystone"
     - name: 'bootstrap keystone' 
       shell: keystone-manage bootstrap --bootstrap-password {{ admin_password }} --bootstrap-admin-url http://{{ inventory_hostname }}:5000/v3/ --bootstrap-internal-url http://{{ inventory_hostname }}:5000/v3/ --bootstrap-public-url http://{{ inventory_hostname }}:5000/v3/ --bootstrap-region-id RegionOne
-  when: install_keystone
+      ignore_errors: True
+    - name: 'copy admin script'
+      template:
+        backup: yes
+        src: utility/admin.sh.j2
+        dest: ~/admin.sh
+        mode: '0700'
+    - name: 'add to startup'
+      shell: 'echo "source ~/admin.sh " >> ~/.bash_profile'
+      when: copy_admin_script is changed
+      tags:
+        - openstack
+        - keystone
+    - name: 'create service project'
+      shell: |
+        source ~/admin.sh 
+        openstack project create --domain default --description "Service Project" service
+  when: install_keystone is changed
+  tags:
+    - openstack
+    - keystone
 
 - name: 'install httpd'
   yum:
@@ -232,6 +314,10 @@
       - httpd 
     state: present
   register: install_httpd
+  tags: 
+    - openstack
+    - keystone
+    - httpd
 
 - name: 'setup httpd'
   block:
@@ -242,24 +328,18 @@
         dest: /etc/httpd/conf/httpd.conf
     - name: 'create config link'
       shell: "ln -s /usr/share/keystone/wsgi-keystone.conf /etc/httpd/conf.d/"
+      args:
+        warn: false
     - name: 'restart & enable httpd'
       systemd:
         name: httpd
         state: started
         enabled: yes
-  when: install_httpd
-
-- name: 'copy admin script'
-  template:
-    backup: yes
-    src: utility/admin.sh.j2
-    dest: ~/admin.sh
-    mode: '0700'
-  register: copy_admin_script
-
-- name: 'add to startup'
-  shell: echo "source ~/admin.sh " >> ~/.bash_profile
-  when: copy_admin_script is changed
+  when: install_httpd is changed
+  tags:
+    - openstack
+    - keystone
+    - httpd
 
 - name: 'install glance'
   yum:
@@ -267,24 +347,25 @@
       - openstack-glance 
     state: present
   register: install_glance
+  tags:
+    - openstack
+    - glance
 
 - name: 'setup glance'
   block:
     - name: 'create database'
       community.mysql.mysql_query:
-        login_user: "{{mysql_root_user}}"
-        login_password: "{{mysql_root_password}}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
         query: 
           - "CREATE DATABASE glance;"
           - "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY '{{glance_password}}';"
-          - "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY '{glance_password}';"
-    - name: 'create project'
+          - "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY '{{glance_password}}';"
+    - name: 'create openstack service'
       shell: |
         source ~/admin.sh 
-        openstack project create --domain default --description "Service Project" service
-        openstack user create --domain default --password {{glance_password}} {{glance_username}}
-        openstack role add --project service --user {{glance_username}} admin
-        openstack service create --name {{glance_username}} --description "OpenStack Image" image
+        openstack user create --domain default --password {{glance_password}} glance
+        openstack role add --project service --user glance admin
+        openstack service create --name glance --description "OpenStack Image" image
         openstack endpoint create --region RegionOne image public http://{{ inventory_hostname }}:9292
         openstack endpoint create --region RegionOne image internal http://{{ inventory_hostname }}:9292
         openstack endpoint create --region RegionOne image admin http://{{ inventory_hostname }}:9292 
@@ -293,14 +374,33 @@
         backup: yes
         src: glance/glance-api.conf.j2
         dest: /etc/glance/glance-api.conf 
-    - name: 'sync db'
-      shell: 'su -s /bin/sh -c "glance-manage db_sync" {{ glance_username }}'
+    - name: 'create glance image folder'
+      file:
+        path: "{{ glance_home_path }}/images"
+        state: directory
+    - name: 'add group permissions'
+      shell: "chgrp -R glance {{ glance_home_path }}"
+    - name: 'add owner permissions'
+      shell: "chown -R glance {{ glance_home_path }}"
+    - name: 'set selinux permissions'
+      shell: "semanage fcontext -a -t glance_var_lib_t '{{ glance_home_path }}(/.*)?'"
+    - name: 'refresh permissions'
+      shell: "restorecon -vvRF {{ glance_home_path }}"
     - name: 'restart & enable glance'
       systemd:
         name: openstack-glance-api.service
         state: started
         enabled: yes
-  when: install_glance
+    - name: 'update permissions'
+      shell: chown -R glance:glance /var/log/glance/api.log
+    - name: 'sync db'
+      become: glance
+      shell: '/bin/sh -c "glance-manage db_sync"'
+      ignore_errors: True
+  when: install_glance is changed
+  tags:
+    - openstack
+    - glance
 
 - name: 'install placement'
   yum:
@@ -308,23 +408,25 @@
       - openstack-placement-api 
     state: present
   register: install_placement
+  tags:
+    - openstack
+    - placement
 
 - name: 'setup placement'
   block:
     - name: 'create database'
       community.mysql.mysql_query:
-        login_user: "{{mysql_root_user}}"
-        login_password: "{{mysql_root_password}}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
         query: 
-          - "CREATE DATABASE {{glance_username}};"
-          - "GRANT ALL PRIVILEGES ON {{placement_username}}.* TO '{{placement_username}}'@'localhost' IDENTIFIED BY '{{placement_password}}';"
-          - "GRANT ALL PRIVILEGES ON {{placement_username}}.* TO '{{placement_username}}'@'%' IDENTIFIED BY '{{placement_password}}';"
-    - name: 'create project'
+          - "CREATE DATABASE placement;"
+          - "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'localhost' IDENTIFIED BY '{{placement_password}}';"
+          - "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' IDENTIFIED BY '{{placement_password}}';"
+    - name: 'create openstack service'
       shell: |
         source ~/admin.sh 
-        openstack user create --domain default --password {{placement_password}} {{placement_username}}
-        openstack role add --project service --user {{placement_username}} admin
-        openstack service create --name {{placement_username}} --description "Placement API" placement
+        openstack user create --domain default --password {{placement_password}} placement
+        openstack role add --project service --user placement admin
+        openstack service create --name placement --description "Placement API" placement
         openstack endpoint create --region RegionOne placement public http://{{ inventory_hostname }}:8778
         openstack endpoint create --region RegionOne placement internal http://{{ inventory_hostname }}:8778
         openstack endpoint create --region RegionOne placement admin http://{{ inventory_hostname }}:8778 
@@ -339,19 +441,16 @@
         src: placement/00-placement-api.conf.j2
         dest: /etc/httpd/conf.d/00-placement-api.conf
     - name: 'sync db'
-      shell: 'su -s /bin/sh -c "placement-manage db sync" {{placement_username}}'
+      become: placement
+      shell: '/bin/sh -c "placement-manage db sync"'
     - name: 'restart httpd'
       systemd:
         name: httpd
         state: restarted
-  when: install_placement
-
-  - name: 'install glance'
-  yum:
-    name:
-      - openstack-glance 
-    state: present
-  register: install_glance
+  when: install_placement is changed
+  tags:
+    - openstack
+    - placement
 
 - name: 'install nova'
   yum:
@@ -362,29 +461,31 @@
       - openstack-nova-scheduler
     state: present
   register: install_nova
+  tags:
+    - openstack
+    - nova
 
 - name: 'setup nova'
   block:
     - name: 'create database'
       community.mysql.mysql_query:
-        login_user: "{{mysql_root_user}}"
-        login_password: "{{mysql_root_password}}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
         query: 
           - "CREATE DATABASE nova_api;"
           - "CREATE DATABASE nova;"
           - "CREATE DATABASE nova_cell0;"
-          - "GRANT ALL PRIVILEGES ON nova_api.* TO '{{nova_username}}'@'localhost' IDENTIFIED BY '{{nova_password}}';"
-          - "GRANT ALL PRIVILEGES ON nova_api.* TO '{{nova_username}}'@'%' IDENTIFIED BY '{{nova_password}}';"
-          - "GRANT ALL PRIVILEGES ON nova.* TO '{{nova_username}}'@'localhost' IDENTIFIED BY '{{nova_password}}';"
-          - "GRANT ALL PRIVILEGES ON nova.* TO '{{nova_username}}'@'%'IDENTIFIED BY '{{nova_password}}';"
-          - "GRANT ALL PRIVILEGES ON nova_cell0.* TO '{{nova_username}}'@'localhost' IDENTIFIED BY '{{nova_password}}';"
-          - "GRANT ALL PRIVILEGES ON nova_cell0.* TO '{{nova_username}}'@'%' IDENTIFIED BY '{{nova_password}}';"
-    - name: 'create project'
+          - "GRANT ALL PRIVILEGES ON nova_api.* TO 'nova'@'localhost' IDENTIFIED BY '{{nova_password}}';"
+          - "GRANT ALL PRIVILEGES ON nova_api.* TO 'nova'@'%' IDENTIFIED BY '{{nova_password}}';"
+          - "GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' IDENTIFIED BY '{{nova_password}}';"
+          - "GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%'IDENTIFIED BY '{{nova_password}}';"
+          - "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'localhost' IDENTIFIED BY '{{nova_password}}';"
+          - "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'%' IDENTIFIED BY '{{nova_password}}';"
+    - name: 'create openstack service'
       shell: |
         source ~/admin.sh 
-        openstack user create --domain default --password {{nova_password}} {{nova_username}}
-        openstack role add --project service --user {{nova_username}} admin
-        openstack service create --name {{nova_username}} --description "OpenStack Compute" compute
+        openstack user create --domain default --password {{nova_password}} nova
+        openstack role add --project service --user nova admin
+        openstack service create --name nova --description "OpenStack Compute" compute
         openstack endpoint create --region RegionOne compute public http://{{ inventory_hostname }}:8774/v2.1
         openstack endpoint create --region RegionOne compute internal http://{{ inventory_hostname }}:8774/v2.1
         openstack endpoint create --region RegionOne compute admin http://{{ inventory_hostname }}:8774/v2.1 
@@ -394,12 +495,13 @@
         src: nova/nova.conf.j2
         dest: /etc/nova/nova.conf
     - name: 'sync db'
+      become: nova
       shell: |
-        su -s /bin/sh -c "nova-manage api_db sync" {{nova_username}}
-        su -s /bin/sh -c "nova-manage cell_v2 map_cell0" {{nova_username}}
-        su -s /bin/sh -c "nova-manage cell_v2 create_cell --name=cell1 --verbose" {{nova_username}}
-        su -s /bin/sh -c "nova-manage db sync" {{nova_username}}
-        su -s /bin/sh -c "nova-manage cell_v2 list_cells" {{nova_username}}
+        /bin/sh -c "nova-manage api_db sync" 
+        /bin/sh -c "nova-manage cell_v2 map_cell0" 
+        /bin/sh -c "nova-manage cell_v2 create_cell --name=cell1 --verbose" 
+        /bin/sh -c "nova-manage db sync" 
+        /bin/sh -c "nova-manage cell_v2 list_cells" 
     - name: 'start & enable nova api'
       systemd:
         name: openstack-nova-api.service
@@ -420,9 +522,15 @@
         name: openstack-nova-novncproxy.service
         state: started
         enabled: yes
+    - name: 'update permissions'
+      shell: chown -R nova:nova /var/log/nova/
     - name: 'discover compute hosts'
-      shell: 'su -s /bin/sh -c "nova-manage cell_v2 discover_hosts --verbose" nova'
-  when: install_nova
+      become: nova
+      shell: '/bin/sh -c "nova-manage cell_v2 discover_hosts --verbose"'
+  when: install_nova is changed
+  tags:
+    - openstack
+    - nova
 
 - name: 'install neutron'
   yum:
@@ -433,26 +541,34 @@
       - ebtables
     state: present
   register: install_neutron
+  tags:
+    - openstack
+    - neutron
 
 - name: 'setup neutron'
   block:
+    - name: 'run startup'
+      shell: '$HOME/startup.sh'
     - name: 'create database'
       community.mysql.mysql_query:
-        login_user: "{{mysql_root_user}}"
-        login_password: "{{mysql_root_password}}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
         query: 
-          - "CREATE DATABASE {{neutron_username}};"
-          - "GRANT ALL PRIVILEGES ON neutron.* TO '{{neutron_username}}'@'localhost' IDENTIFIED BY '{{neutron_password}}';"
-          - "GRANT ALL PRIVILEGES ON neutron.* TO '{{neutron_username}}'@'%' IDENTIFIED BY '{{neutron_password}}';"
-    - name: 'create project'
+          - "CREATE DATABASE neutron;"
+          - "GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'localhost' IDENTIFIED BY '{{neutron_password}}';"
+          - "GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'%' IDENTIFIED BY '{{neutron_password}}';"
+      tags:
+        - mariadb
+    - name: 'create openstack service'
       shell: |
         source ~/admin.sh 
-        openstack user create --domain default --password {{neutron_username}} {{neutron_password}}
-        openstack role add --project service --user {{neutron_username}} admin
-        openstack service create --name {{nova_username}} --description "OpenStack Networking" network
+        openstack user create --domain default --password {{neutron_password}} neutron
+        openstack role add --project service --user neutron admin
+        openstack service create --name neutron --description "OpenStack Networking" network
         openstack endpoint create --region RegionOne network public http://{{ inventory_hostname }}:9696
         openstack endpoint create --region RegionOne network internal http://{{ inventory_hostname }}:9696
         openstack endpoint create --region RegionOne network admin http://{{ inventory_hostname }}:9696
+      tags:
+        - neutronservice
     - name: 'copy service conf'
       template:
         backup: yes
@@ -486,7 +602,14 @@
     - name: 'symbolic link'
       shell: ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
     - name: 'sync db'
-      shell: 'su -s /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" {{ neutron_username }}'
+      become: neutron
+      shell: '/bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head"'
+    - name: 'set up bridging'
+      shell: |
+        modprobe br_netfilter
+        sysctl -p
+        sysctl net.bridge.bridge-nf-call-iptables
+        sysctl net.bridge.bridge-nf-call-ip6tables
     - name: 'start & enable service'
       systemd:
         name: neutron-server.service
@@ -494,7 +617,7 @@
         enabled: yes
     - name: 'start & enable linuxbridge agent'
       systemd:
-        name:   neutron-linuxbridge-agent.service
+        name:  neutron-linuxbridge-agent.service
         state: started
         enabled: yes
     - name: 'start & enable dhcp agent'
@@ -502,19 +625,20 @@
         name: neutron-dhcp-agent.service
         state: started
         enabled: yes
-    - name: 'restart & enable metadata agent'
+    - name: 'start & enable metadata agent'
       systemd:
         name: neutron-metadata-agent.service
         state: started
         enabled: yes
-    - name: 'restart & enable l3 agent'
+    - name: 'start & enable l3 agent'
       systemd:
         name: neutron-l3-agent.service
         state: started
         enabled: yes
-    - name: 'discover compute hosts'
-      shell: 'su -s /bin/sh -c "nova-manage cell_v2 discover_hosts --verbose" nova'
-  when: install_neutron
+  when: install_neutron is changed
+  tags:
+    - openstack
+    - neutron
 
 - name: 'install horizon'
   yum:
@@ -522,6 +646,9 @@
       - openstack-dashboard
     state: present
   register: install_horizon
+  tags:
+    - openstack
+    - horizon
 
 - name: 'setup horizon'
   block:
@@ -576,6 +703,11 @@
         backup: true
         src: horizon/html/_stylesheets.html
         dest: /usr/share/openstack-dashboard/openstack_dashboard/templates/_stylesheets.html
+    # - name: 'copy panel.py'
+    #   copy:
+    #     backup: true
+    #     src: horizon/html/panel.py
+    #     dest: /usr/share/openstack-dashboard/openstack_dashboard/dashboards/project/network_topology/panel.py
     - name: 'copy active maintenance script'
       copy:
         backup: true
@@ -588,7 +720,13 @@
       systemd:
         name: httpd
         state: restarted
-  when: install_horizon
+    - name: 'TODO: oslo policy configuration task'
+      debug: 
+        msg: 'TODO: oslo policy configuration task'
+  when: install_horizon is changed
+  tags:
+    - openstack
+    - horizon
 
 - name: 'install cinder'
   yum:
@@ -596,45 +734,45 @@
       - openstack-cinder
     state: present
   register: install_cinder
+  tags:
+    - openstack
+    - cinder
 
 - name: 'setup cinder'
   block:
     - name: 'create database'
       community.mysql.mysql_query:
-        login_user: "{{mysql_root_user}}"
-        login_password: "{{mysql_root_password}}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
         query: 
-          - "CREATE DATABASE {{cinder_username}};"
-          - "GRANT ALL PRIVILEGES ON cinder.* TO '{{cinder_username}}'@'localhost' IDENTIFIED BY '{{cinder_password}}';"
-          - "GRANT ALL PRIVILEGES ON cinder.* TO '{{cinder_username}}'@'%' IDENTIFIED BY '{{cinder_password}}';"
-    - name: 'create project'
+          - "CREATE DATABASE cinder;"
+          - "GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost' IDENTIFIED BY '{{cinder_password}}';"
+          - "GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY '{{cinder_password}}';"
+    - name: 'create openstack service'
       shell: |
         source ~/admin.sh 
-        openstack user create --domain default --password {{cinder_username}} {{cinder_password}}
-        openstack role add --project service --user {{cinder_username}} admin
+        openstack user create --domain default --password {{cinder_password}} cinder
+        openstack role add --project service --user cinder admin
         openstack service create --name cinderv2 --description "OpenStack Block Storage" volumev2
         openstack service create --name cinderv3 --description "OpenStack Block Storage" volumev3
-        openstack endpoint create --region RegionOne volumev2 public http://controller:8776/v2/%\(project_id\)s
-        openstack endpoint create --region RegionOne volumev2 internal http://controller:8776/v2/%\(project_id\)s
-        openstack endpoint create --region RegionOne volumev2 admin http://controller:8776/v2/%\(project_id\)s
-        openstack endpoint create --region RegionOne volumev3 public http://controller:8776/v3/%\(project_id\)s
-        openstack endpoint create --region RegionOne volumev3 internal http://controller:8776/v3/%\(project_id\)s
-        openstack endpoint create --region RegionOne volumev3 admin http://controller:8776/v3/%\(project_id\)s
+        # TODO: verify that these changes to the double escape work as intended.
+        openstack endpoint create --region RegionOne volumev2 public http://{{ inventory_hostname }}:8776/v2/%\(project_id\)s
+        openstack endpoint create --region RegionOne volumev2 internal http://{{ inventory_hostname }}:8776/v2/%\(project_id\)s
+        openstack endpoint create --region RegionOne volumev2 admin http://{{ inventory_hostname }}:8776/v2/%\(project_id\)s
+        openstack endpoint create --region RegionOne volumev3 public http://{{ inventory_hostname }}:8776/v3/%\(project_id\)s
+        openstack endpoint create --region RegionOne volumev3 internal http://{{ inventory_hostname }}:8776/v3/%\(project_id\)s
+        openstack endpoint create --region RegionOne volumev3 admin http://{{ inventory_hostname }}:8776/v3/%\(project_id\)s
     - name: 'copy service conf'
       template:
         backup: yes
         src: cinder/cinder.conf.j2
         dest: /etc/cinder/cinder.conf
-    - name: 'sync db'
-      shell: 'su -s /bin/sh -c "cinder-manage db sync" {{cinder_username}}'
     - name: 'restart nova'
       systemd:
         name:  openstack-nova-api.service
         state: restarted
-        enabled: yes
     - name: 'start & enable api'
       systemd:
-        name:  openstack-cinder-api.service
+        name: openstack-cinder-api.service
         state: started
         enabled: yes
     - name: 'start & enable scheduler'
@@ -642,19 +780,16 @@
         name: openstack-cinder-scheduler.service
         state: started
         enabled: yes
-  
-  
-  
-    - name: 'restart & enable metadata agent'
+    - name: 'update permissions'
+      shell: chown -R cinder:cinder /var/log/cinder/cinder-manage.log
+    - name: 'sync db'
+      become: cinder
+      shell: '/bin/sh -c "cinder-manage db sync"'
+    - name: 'start & enable scheduler'
       systemd:
-        name: neutron-metadata-agent.service
-        state: started
-        enabled: yes
-    - name: 'restart & enable l3 agent'
-      systemd:
-        name: neutron-l3-agent.service
-        state: started
-        enabled: yes
-    - name: 'discover compute hosts'
-      shell: 'su -s /bin/sh -c "nova-manage cell_v2 discover_hosts --verbose" nova'
-  when: install_neutron
+        name:  openstack-cinder-api.service
+        state: restarted
+  when: install_cinder is changed
+  tags:
+    - openstack
+    - cinder

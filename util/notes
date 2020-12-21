@@ -1,0 +1,91 @@
+
+###########################################
+############# BLOCK TEARDOWN ##############
+###########################################
+# teardown cinder
+yum remove 
+lvm2 \
+device-mapper-persistent-data \
+openstack-cinder \
+targetcli \
+python-keystone -y
+
+###########################################
+############ COMPUTE TEARDOWN #############
+###########################################
+# teardown nova 
+yum remove centos-release-openstack-train \
+        python-openstackclient \
+        openstack-selinux \
+        openstack-nova-compute \
+        openstack-neutron-linuxbridge \
+        ebtables \
+        ipset \
+        chrony \
+        firewalld -y \
+    && rm -rf /etc/firewalld/zones \
+    && rm -rf ~/startup.sh \
+    && rm -rf /home/nova # {{ nova_state_path }}
+
+###########################################
+########### CONTROLLER TEARDOWN ###########
+###########################################
+# teardown cinder
+yum remove openstack-cinder -y
+
+# teardown horizon
+yum remove openstack-dashboard -y
+
+# teardown neutron
+rm -f /etc/neutron/plugins/ml2/ml2_conf.ini \
+    && rm -f /etc/neutron/plugin.ini \
+    && yum remove \
+        openstack-neutron \
+        openstack-neutron-ml2 \
+        openstack-neutron-linuxbridge \
+        ebtables -y
+
+# teardown nova
+yum remove \
+    openstack-nova-api \
+    openstack-nova-conductor \
+    openstack-nova-novncproxy \
+    openstack-nova-scheduler -y
+
+# teardown placement
+yum remove openstack-placement-api -y
+
+# teardown glance
+# remove the folder: {{ glance_home_path }}
+rm -rf /home/glance \
+rm -f cirros-0.4.0* \
+    && yum remove openstack-glance -y
+
+# teardown mariadb and keystone
+# remove softlinks first otherwise the remove will cache the files
+rm -f /usr/share/keystone/wsgi-keystone.conf \
+    && rm -f /etc/httpd/conf.d/wsgi-keystone.conf \
+    && yum remove openstack-keystone httpd mod_wsgi mysql mysql-server mariadb openstack-glance -y \
+    && rm -rf /var/lib/mysql/ \
+    && rm -f /root/.my.cnf \
+    && rm -f /etc/my.cnf.d/openstack.conf
+
+# teardown basic services
+yum remove \
+    etcd \
+    memcached \
+    python-memcached \
+    rabbitmq-server \
+    chrony \
+    firewalld \
+    python-openstackclient \
+    openstack-selinux \
+    ebtables \
+    ipset \
+    centos-release-openstack-train -y \
+ && rm -rf /etc/firewalld/zones \
+ && rm -rf ~/startup.sh
+
+# Teardown more folders for firewalld.
+
+ 

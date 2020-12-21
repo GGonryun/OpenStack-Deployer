@@ -8,7 +8,7 @@ source ~/admin.sh
 openstack domain create --description "An Example Domain" example
 openstack project create --domain default --description "Demo Project" $testproject
 openstack user create --domain default --password $testpassword $testusername
-openstack role create testrole
+openstack role create $testrole
 openstack role add --project $testproject --user $testusername $testrole
 
 unset OS_AUTH_URL OS_PASSWORD

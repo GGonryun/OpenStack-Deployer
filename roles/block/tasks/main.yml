@@ -3,12 +3,30 @@
   pause:
     prompt: "This host should have two more partitions labelled: /dev/sdb /dev/sdc, if this hasn't been done please abort this playbook. View https://docs.openstack.org/cinder/train/install/cinder-storage-install-rdo.html for more information."
 
+- name: 'copy chrony template'
+  template:
+    backup: yes
+    src: chrony.conf.j2
+    dest: /etc/chrony.conf
+  register: chrony_update
+  tags:
+    - basic
+
+- name: 'restart chrony'
+  systemd:
+    name: chronyd
+    state: restarted
+    enabled: yes
+  when: chrony_update is changed
+  tags:
+    - basic
+
 - name: 'install cinder packages'
   yum:
     name:
-      - lvm2 
+      - lvm2
       - device-mapper-persistent-data
-      - openstack-cinder 
+      - openstack-cinder
       - targetcli
       - python-keystone
     state: present
@@ -23,8 +41,10 @@
         enabled: yes
     - name: 'create volume'
       shell:  |
-        pvcreate /dev/sdb
-        vgcreate cinder-volumes /dev/sdb
+        pvcreate {{item}}
+        vgcreate cinder-volumes {{item}}
+      loop:
+        - /dev/sdb
     - name: 'copy lvm conf'
       template:
         src:  cinder/lvm.conf.j2
@@ -35,15 +55,19 @@
         src:  cinder/cinder.conf.j2
         dest: /etc/cinder/cinder.conf 
         backup: yes
+    - name: 'update permissions'
+      shell: chown -R glance:glance /var/log/glance/api.log
+    - name: 'disable selinux'
+      shell: setenforce 0
     - name: 'start cinder volumes'
       systemd:
         name: openstack-cinder-volume.service
         state: started
         enabled: yes
-    - name: 'start target service'
+        # ( ͡° ͜ʖ ͡°)
+    - name: 'gimmie dat service'
       systemd:
         name:  target.service
         state: started
         enabled: yes
-        # ( ͡° ͜ʖ ͡°)
   when: install_cinder is changed

@@ -1,0 +1,7 @@
+#!/bin/bash
+
+mysql --user="{{ mysql_root_username }}" --password="{{ mysql_root_password }}" --execute="SET GLOBAL max_connections = 4096;"
+
+iptables -D INPUT -j REJECT --reject-with icmp-host-prohibited
+iptables -D FORWARD -j REJECT --reject-with icmp-host-prohibited
+iptables -A POSTROUTING -t mangle -p udp --dport 68 -j CHECKSUM --checksum-fill

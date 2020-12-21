@@ -1,0 +1,5 @@
+- hosts: all
+  order: inventory
+  name: 'display warning'
+  pause:
+    prompt: "YOU ARE RUNNING THIS PLAYBOOK AGAINST PRODUCTION. IF THIS WAS NOT INTENDED PLEASE PRESS CONTROL + C"

@@ -1,0 +1,21 @@
+[DEFAULT]
+transport_url = rabbit://openstack:{{rabbitmq_password}}@{{inventory_hostname}}
+auth_strategy = keystone
+my_ip = {{ hostvars[inventory_hostname]['ansible_host'] }}
+
+[database]
+connection = mysql+pymysql://cinder:{{cinder_password}}@{{inventory_hostname}}/cinder
+
+[keystone_authtoken]
+www_authenticate_uri = http://{{inventory_hostname}}:5000
+auth_url = http://{{inventory_hostname}}:5000
+memcached_servers = {{inventory_hostname}}:11211
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+project_name = service
+username = cinder
+password = {{cinder_password}}
+
+[oslo_concurrency]
+lock_path = /var/lib/cinder/tmp

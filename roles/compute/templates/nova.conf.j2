@@ -1,6 +1,6 @@
 [DEFAULT]
 enabled_apis = osapi_compute,metadata
-transport_url = rabbit://openstack:{{ rabbitmq_pass }}@{{ controller_host }}
+transport_url = rabbit://openstack:{{ rabbitmq_pass }}@{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}
 my_ip = {{ hostvars[inventory_hostname]['ansible_host'] }}
 use_neutron = true
 firewall_driver = nova.virt.firewall.NoopFirewallDriver
@@ -30,14 +30,14 @@ auth_strategy = keystone
 os_region_name = RegionOne
 
 [keystone_authtoken]
-www_authenticate_uri = http://{{ controller_host }}:5000/
-auth_url = http://{{ controller_host }}:5000/
-memcached_servers = {{ controller_host }}:11211
+www_authenticate_uri = http://{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}:5000/
+auth_url = http://{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}:5000/
+memcached_servers = {{  hostvars[groups['controllers'][0]]['ansible_hostname']  }}:11211
 auth_type = password
 project_domain_name=Default
 user_domain_name=Default
 project_name=service
-username={{nova_username}}
+username=nova
 password={{nova_password}}
 
 
@@ -51,7 +51,7 @@ novncproxy_host={{public_ip}}
 novncproxy_port={{public_port}}
 
 [glance]
-api_servers = http://{{controller_host}}:9292
+api_servers = http://{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}:9292
 
 [oslo_concurrency]
 lock_path = /var/lib/nova/tmp
@@ -62,17 +62,17 @@ project_domain_name = Default
 project_name = service
 auth_type = password
 user_domain_name = Default
-auth_url = http://{{controller_host}}:5000/v3
-username = {{placement_username}}
+auth_url = http://{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}:5000/v3
+username = placement
 password = {{placement_password}}
 
 [neutron]
-www_authenticate_uri = http://{{controller_host}}:5000
-auth_url = http://{{controller_host}}:5000
-memcached_servers = {{controller_host}}:11211
+www_authenticate_uri = http://{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}:5000
+auth_url = http://{{ hostvars[groups['controllers'][0]]['ansible_hostname'] }}:5000
+memcached_servers = {{hostvars[groups['controllers'][0]]['ansible_hostname'] }}:11211
 auth_type = password
 project_domain_name = default
 user_domain_name = default
 project_name = service
-username = {{neutron_username}}
+username = neutron
 password = {{neutron_password}}

@@ -1,0 +1,13 @@
+[openstack]
+controller ansible_host=10.10.10.77 provider_network_ip=192.168.128.77 physical_interface=enp5s0
+tcompute1 ansible_host=10.10.10.66 provider_network_ip=192.168.128.66 physical_interface=em1
+tblock1 ansible_host=10.10.10.88 provider_network_ip=192.168.128.88
+
+[controllers]
+controller
+
+[computes]
+tcompute1
+
+[blocks]
+tblock1

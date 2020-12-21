@@ -1,5 +1,5 @@
 ---
-- name: Hostfile generation
+- name: Gather facts
   hosts: all
   become: true
   tasks:
