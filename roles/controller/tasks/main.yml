@@ -37,35 +37,35 @@
 
 - name: 'setup firewall'
   block:
-    - name: 'enable firewalld'
-      systemd:
-        name: firewalld
-        state: started
-        enabled: yes
-    - shell: firewall-cmd --permanent --add-service=mysql
-    - shell: firewall-cmd --zone=public --permanent --add-port=4369/tcp --add-port=25672/tcp --add-port=5671-5672/tcp --add-port=15672/tcp  --add-port=61613-61614/tcp --add-port=1883/tcp --add-port=8883/tcp
-      # TODO: the memcached zone might already exist, running the teardown 
-      # script will remove this but it is not truely idempotent yet.
-    - shell: firewall-cmd --new-zone=memcached --permanent
-      ignore_errors: True
-    - shell: firewall-cmd --zone=memcached --add-port=11211/udp --permanent
-    - shell: firewall-cmd --zone=memcached --add-port=11211/tcp --permanent
-    - shell: firewall-cmd --zone=memcached --add-source=10.0.0.0/24 --permanent
-    - shell: firewall-cmd --zone=memcached --add-source=10.10.10.0/24 --permanent
-    - shell: firewall-cmd --add-port={2379,2380}/tcp --permanent
-    - shell: firewall-cmd --zone=public --add-port=5000/tcp --permanent
-    - shell: firewall-cmd --permanent --zone=public --add-service=http
-    - shell: firewall-cmd --permanent --zone=public --add-service=https
-    - shell: firewall-cmd --add-port=9292/tcp --permanent
-    - shell: firewall-cmd --add-port=9292/udp --permanent
-    - shell: firewall-cmd --add-port=8778/tcp --permanent
-    - shell: firewall-cmd --add-port={9696/tcp,9696/udp} --permanent
-    - shell: firewall-cmd --add-port={5902/tcp,5902/udp} --permanent
-    - shell: firewall-cmd --add-port={6080/tcp,6081/tcp,6082/tcp,8775/tcp,8778/tcp} --permanent 
-    - shell: firewall-cmd --add-port={9696/tcp,9696/udp} --permanent 
-    - shell: firewall-cmd --add-port={68/tcp,68/udp} --permanent 
-    - shell: firewall-cmd --add-port=5900-5999/tcp --permanent
-    - shell: firewall-cmd --add-port=8776/tcp --permanent
+    # - name: 'enable firewalld'
+    #   systemd:
+    #     name: firewalld
+    #     state: started
+    #     enabled: yes
+    # - shell: firewall-cmd --permanent --add-service=mysql
+    # - shell: firewall-cmd --zone=public --permanent --add-port=4369/tcp --add-port=25672/tcp --add-port=5671-5672/tcp --add-port=15672/tcp  --add-port=61613-61614/tcp --add-port=1883/tcp --add-port=8883/tcp
+    #   # TODO: the memcached zone might already exist, running the teardown 
+    #   # script will remove this but it is not truely idempotent yet.
+    # - shell: firewall-cmd --new-zone=memcached --permanent
+    #   ignore_errors: True
+    # - shell: firewall-cmd --zone=memcached --add-port=11211/udp --permanent
+    # - shell: firewall-cmd --zone=memcached --add-port=11211/tcp --permanent
+    # - shell: firewall-cmd --zone=memcached --add-source=10.0.0.0/24 --permanent
+    # - shell: firewall-cmd --zone=memcached --add-source=10.10.10.0/24 --permanent
+    # - shell: firewall-cmd --add-port={2379,2380}/tcp --permanent
+    # - shell: firewall-cmd --zone=public --add-port=5000/tcp --permanent
+    # - shell: firewall-cmd --permanent --zone=public --add-service=http
+    # - shell: firewall-cmd --permanent --zone=public --add-service=https
+    # - shell: firewall-cmd --add-port=9292/tcp --permanent
+    # - shell: firewall-cmd --add-port=9292/udp --permanent
+    # - shell: firewall-cmd --add-port=8778/tcp --permanent
+    # - shell: firewall-cmd --add-port={9696/tcp,9696/udp} --permanent
+    # - shell: firewall-cmd --add-port={5902/tcp,5902/udp} --permanent
+    # - shell: firewall-cmd --add-port={6080/tcp,6081/tcp,6082/tcp,8775/tcp,8778/tcp} --permanent 
+    # - shell: firewall-cmd --add-port={9696/tcp,9696/udp} --permanent 
+    # - shell: firewall-cmd --add-port={68/tcp,68/udp} --permanent 
+    # - shell: firewall-cmd --add-port=5900-5999/tcp --permanent
+    # - shell: firewall-cmd --add-port=8776/tcp --permanent
     - shell: setsebool -P nis_enabled 1
     - shell: setsebool -P glance_api_can_network on 
       # TODO: the two semanage commands may already have been
@@ -74,8 +74,8 @@
       ignore_errors: True
     - shell: semanage port -a -t http_port_t -p tcp 8774
       ignore_errors: True
-    - name: 'reload firewall'
-      shell: firewall-cmd --reload
+    # - name: 'reload firewall'
+    #   shell: firewall-cmd --reload
   when: (firewalld_install is changed) and (base_install is changed)
   tags:
     - basic
@@ -254,6 +254,7 @@
     name:
       - openstack-keystone 
       - mod_wsgi
+      - httpd 
     state: present
   register: install_keystone
   tags: 
@@ -295,29 +296,10 @@
         mode: '0700'
     - name: 'add to startup'
       shell: 'echo "source ~/admin.sh " >> ~/.bash_profile'
-      when: copy_admin_script is changed
-      tags:
-        - openstack
-        - keystone
-    - name: 'create service project'
-      shell: |
-        source ~/admin.sh 
-        openstack project create --domain default --description "Service Project" service
   when: install_keystone is changed
   tags:
     - openstack
     - keystone
-
-- name: 'install httpd'
-  yum:
-    name:
-      - httpd 
-    state: present
-  register: install_httpd
-  tags: 
-    - openstack
-    - keystone
-    - httpd
 
 - name: 'setup httpd'
   block:
@@ -335,11 +317,23 @@
         name: httpd
         state: started
         enabled: yes
-  when: install_httpd is changed
+  when: install_keystone is changed
   tags:
     - openstack
     - keystone
     - httpd
+
+- name: 'create service project and roles'
+  shell: |
+    source ~/admin.sh 
+    openstack project create --domain default --description "Service Project" service
+    openstack role create {{ student_role_name }}
+    openstack role create {{ service_role_name }}
+
+  when: install_keystone is changed
+  tags:
+    - openstack
+    - keystone
 
 - name: 'install glance'
   yum:
@@ -527,6 +521,30 @@
     - name: 'discover compute hosts'
       become: nova
       shell: '/bin/sh -c "nova-manage cell_v2 discover_hosts --verbose"'
+    - name: 'create openstack flavors'
+      shell: |
+        source ~/admin.sh 
+        openstack flavor create --id 0 --vcpus 1 --ram 64 --disk 1 m1.small
+        openstack flavor create --id 1 --vcpus 1 --ram 2048 --disk 20 m1.small
+        openstack flavor create --id 2 --vcpus 1 --ram 4096 --disk 50 m1.medium
+        openstack flavor create --id 3 --vcpus 1 --ram 8192 --disk 100 m1.large
+        openstack flavor create --id 4 --vcpus 1 --ram 16384 --disk 200 m1.huge
+        openstack flavor create --id 5 --vcpus 2 --ram 2048 --disk 20 m2.small
+        openstack flavor create --id 6 --vcpus 2 --ram 4096 --disk 50 m2.medium
+        openstack flavor create --id 7 --vcpus 2 --ram 8192 --disk 100 m2.large
+        openstack flavor create --id 8 --vcpus 2 --ram 16384 --disk 200 m2.huge
+        openstack flavor create --id 9 --vcpus 4 --ram 2048 --disk 20 m4.small
+        openstack flavor create --id 10 --vcpus 4 --ram 4096 --disk 50 m4.medium
+        openstack flavor create --id 11 --vcpus 4 --ram 8192 --disk 100 m4.large
+        openstack flavor create --id 12 --vcpus 4 --ram 16384 --disk 200 m4.huge
+        openstack flavor create --id 13 --vcpus 8 --ram 2048 --disk 20 m8.small
+        openstack flavor create --id 14 --vcpus 8 --ram 4096 --disk 50 m8.medium
+        openstack flavor create --id 15--vcpus 8 --ram 8192 --disk 100 m8.large
+        openstack flavor create --id 16 --vcpus 8 --ram 16384 --disk 200 m8.huge
+        openstack flavor create --id 17 --vcpus 16 --ram 2048 --disk 20 m16.small
+        openstack flavor create --id 18 --vcpus 16 --ram 4096 --disk 50 m16.medium
+        openstack flavor create --id 19 --vcpus 16 --ram 8192 --disk 100 m16.large
+        openstack flavor create --id 20 --vcpus 16 --ram 16384 --disk 200 m16.huge
   when: install_nova is changed
   tags:
     - openstack
@@ -662,19 +680,23 @@
         backup: yes
         src: horizon/openstack-dashboard.conf.j2
         dest: /etc/httpd/conf.d/openstack-dashboard.conf
+    - name: 'restart http'
+      systemd:
+        name: httpd
+        state: restarted        
     - name: 'copy bsoe img'
       copy:
         src: horizon/images/bsoe.png
-        dest: /usr/share/openstack-dashboard/static/dashboard/img/bsoe.png
+        dest: /usr/share/openstack-dashboard/openstack_dashboard/static/dashboard/img/bsoe.png
     - name: 'copy ccet img'
       copy:
         src: horizon/images/ccet.png
-        dest: /usr/share/openstack-dashboard/static/dashboard/img/ccet.png
+        dest: /usr/share/openstack-dashboard/openstack_dashboard/static/dashboard/img/ccet.png
     - name: 'copy favicon'
       copy:
         backup: true
         src: horizon/images/favicon.ico
-        dest: /usr/share/openstack-dashboard/static/dashboard/img/favico.icon  
+        dest: /usr/share/openstack-dashboard/openstack_dashboard/static/dashboard/img/favico.icon  
     - name: 'copy base html file'
       copy: 
         backup: true

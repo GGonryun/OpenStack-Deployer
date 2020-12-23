@@ -1,0 +1,15 @@
+rm -f /etc/td-agent/td-agent.conf
+vim /etc/td-agent/td-agent.conf
+
+sudo systemctl restart td-agent.service
+
+curl -X POST -d 'json={"json":"message"}' http://localhost:8888/debug.test
+tail -n 1 /var/log/td-agent/td-agent.log
+
+
+vi /usr/lib/systemd/system/td-agent.service
+
+#change td-agent to root
+
+sudo systemctl daemon-reload
+sudo systemctl restart td-agent.service

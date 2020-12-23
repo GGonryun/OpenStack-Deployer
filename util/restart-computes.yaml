@@ -1,0 +1,10 @@
+---
+- hosts: computes
+  order: inventory
+  tasks:
+    - name: test connection
+      systemd:
+        name:
+          - openstack-nova-compute.service
+          - neutron-linuxbridge-agent.service
+        state: restarted

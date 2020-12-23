@@ -23,12 +23,6 @@ glance image-create --name "cirros" --file cirros-0.4.0-x86_64-disk.img --disk-f
 glance image-list
 
 placement-status upgrade check
-# curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py"
-# python get-pip.py
-# pip install osc-placement
-# openstack --os-placement-api-version 1.2 resource class list --sort-column name
-# openstack --os-placement-api-version 1.6 trait list --sort-column name
-
 
 openstack compute service list
 openstack catalog list
@@ -40,5 +34,3 @@ openstack network agent list
 curl -I -L -X get http://192.168.128.77/dashboard/auth/login
 
 openstack volume service list
-
-

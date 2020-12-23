@@ -1,0 +1,26 @@
+glance image-create --progress --name "Broken Web App 1" --file bwa.qcow2 --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "Broken Web App 2" --file bwa2.qcow2 --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "CentOS" --file centos.qcow2 --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "Kali Linux" --file kali.qcow2 --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "Labtainer 1" --file labtainer.qcow2 --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "Labtainer 2" --file labtainer2.qcow2 --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "Metasploitable 2" --file metasploitable2.qcow2 --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "Metasploitable 3 Windows" --file metasploitable3win.qcow2 --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "Ubuntu" --file ubuntu.qcow2 --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "Windows Server 2016" --file windows2016.qcow2 --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "Windows 10" --file Windows10pro.qcow --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "WTE" --file wte.qcow2 --disk-format qcow2 --container-format bare --visibility public
+glance image-create --progress --name "Windows Server 2016 3" --file WindowS2016.qcow --disk-format qcow2 --container-format bare --visibility public
+
+scp -p bwa.qcow2 root@192.168.128.18:/home/images/bwa.qcow2
+scp -p bwa2.qow2 root@192.168.128.18:/home/images/bwa2.qcow2
+scp -p centos-pw.qcow2 root@192.168.128.18:/home/images/centos.qcow2
+scp -p kali-rolling.qcow2 root@192.168.128.18:/home/images/kali.qcow2
+scp -p labtainer.qcow2 root@192.168.128.18:/home/images/labtainer.qcow2
+scp -p labtainer2.qcow2 root@192.168.128.18:/home/images/labtainer2.qcow2
+scp -p metasploitable2.qcow2 root@192.168.128.18:/home/images/metasploitable2.qcow2
+scp -p metasploitable3win.qcow2 root@192.168.128.18:/home/images/metasploitable3win.qcow2
+scp -p ubuntu-pw.qcow2 root@192.168.128.18:/home/images/ubuntu.qcow2
+scp -p Windows10Proi.qcow root@192.168.128.18:/home/images/Windows10pro.qcow
+scp -p windows2016.qcow2 root@192.168.128.18:/home/images/windows2016.qcow2
+scp -p wte.qcow2 root@192.168.128.18:/home/images/wte.qcow2

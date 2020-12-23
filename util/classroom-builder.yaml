@@ -1,0 +1,20 @@
+- hosts: controllers
+  tasks:
+  - name: 'setup classroom builders'
+    block:
+      - name: 'install git'
+        yum:
+          name: git
+          state: present
+        tags:
+          - git
+
+      - name: 'create folder'
+        file:
+          path: "{{ scripts_path }}"
+          state: directory
+        register: created_folder
+
+      - name: 'download classroom builder'
+        shell: "git clone {{ classroom_builder_git_url }} {{ scripts_path }}"
+        when: created_folder is changed
