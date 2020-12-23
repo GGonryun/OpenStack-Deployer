@@ -1,0 +1,13 @@
+- hosts: blocks
+  tasks:
+    - name: 'teardown cinder'
+      yum:
+        name:
+          - lvm2
+          - device-mapper-persistent-data
+          - openstack-cinder
+          - targetcli
+          - python-keystone
+        state: removed
+      tags:
+        - teardown

@@ -1,0 +1,11 @@
+version: '3'
+services:
+  fluentd:
+    image: 'fluentd'
+    ports:
+      - '24224:24224/tcp'
+      - '24224:24224/udp'
+    user: root
+    volumes: 
+      - ./fluent.conf:/fluentd/etc/fluent.conf
+      - /home/logging:/fluentd/log

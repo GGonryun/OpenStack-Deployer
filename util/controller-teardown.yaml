@@ -1,0 +1,123 @@
+- hosts: controllers
+  tasks:
+    - name: 'teardown cinder'
+      yum:
+        name:
+          - openstack-cinder
+        state: removed
+      tags:
+        - cinder
+    
+    - name: 'teardown horizon'
+      yum:
+        name:
+          - openstack-dashboard
+        state: removed
+      tags:
+        - horizon
+
+    - name: 'remove services'
+      shell: | 
+        rm -f /etc/neutron/plugins/ml2/ml2_conf.ini # TODO: technically these came before the yum. does it matter?
+        rm -f /etc/neutron/plugin.ini
+
+    - name: 'teardown neutron'
+      yum:
+        name:
+          - openstack-neutron
+          - openstack-neutron-ml2
+          - openstack-neutron-linuxbridge
+          - ebtables
+        state: removed
+      tags:
+        - neutron
+
+    - name: 'remove nova files'
+      shell: rm -rf /home/nova
+      
+    - name: 'teardown nova'
+      yum:
+        name:
+          - openstack-nova-api
+          - openstack-nova-conductor
+          - openstack-nova-novncproxy
+          - openstack-nova-scheduler
+        state: removed
+      tags:
+        - nova
+
+    - name: 'teardown placement'
+      yum:
+        name: 
+          - openstack-placement-api
+        state: removed
+      tags:
+        - placement
+
+    - name: 'remove glance'
+      shell: |
+        rm -rf /home/glance # todo: does it matter? these came before the yum cmd
+        rm -f cirros-0.4.0*
+
+    - name: 'teardown glance'
+      yum:
+        name:
+          - openstack-glance
+        state: removed
+     
+      tags:
+        - glance
+
+    - name: 'remove softlinks'
+      shell: |
+        rm -f /usr/share/keystone/wsgi-keystone.conf
+        rm -f /etc/httpd/conf.d/wsgi-keystone.conf # todo: remove duplicate key
+    
+    - name: 'remove mariadb and keystone packages'
+      yum:
+        name:
+          - openstack-keystone
+          - httpd
+          - mod_wsgi
+          - mysql
+          - mysql-server
+          - mariadb
+          - openstack-glance
+        state: removed
+
+    - name: 'remove mariadb files'
+      shell: | 
+        rm -rf /var/lib/mysql
+        rm -f ~/.my.cnf
+        rm -f /etc/my.cnf.d/openstack.conf
+      tags:
+        - mariadb
+        - keystone
+
+    - name: 'teardown basic services'
+      yum:
+        name:
+          - etcd
+          - memcached
+          - python-memcached
+          - rabbitmq-server
+          - chrony
+          - firewalld
+          - python-openstackclient
+          - openstack-selinux
+          - ebtables
+          - ipset
+          - centos-release-openstack-train
+        state: removed
+    
+    - name: 'remove firewalld zones'
+      shell: rm -rf /etc/firewalld/zones
+    
+    - name: 'remove startup script'
+      shell: rm -rf ~/startup.sh
+      tags:
+        - basic
+        - services
+
+      
+

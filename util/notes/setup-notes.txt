@@ -1,0 +1,564 @@
+CREATE DATABASE keystone;
+GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY 'e7fd28dca569291fd493079d2927ad';
+GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY 'e7fd28dca569291fd493079d2927ad';
+
+vi /etc/keystone/keystone.conf
+connection = mysql+pymysql://keystone:e7fd28dca569291fd493079d2927ad@controller/keystone
+
+
+
+su -s /bin/sh -c "keystone-manage db_sync" keystone
+
+keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
+keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
+
+keystone-manage bootstrap --bootstrap-password 86867313618662be59ee55e0cf8dbc \
+  --bootstrap-admin-url http://controller:5000/v3/ \
+  --bootstrap-internal-url http://controller:5000/v3/ \
+  --bootstrap-public-url http://controller:5000/v3/ \
+  --bootstrap-region-id RegionOne
+
+
+vi /etc/httpd/conf/httpd.conf
+
+ln -s /usr/share/keystone/wsgi-keystone.conf /etc/httpd/conf.d/
+
+systemctl enable httpd.service
+systemctl start httpd.service
+
+openstack domain create --description "An Example Domain" example
+openstack project create --domain default \
+  --description "Service Project" service
+
+openstack project create --domain default \
+  --description "Demo Project" myproject
+
+openstack user create --domain default \
+  --password-prompt myuser
+
+openstack role create myrole
+
+openstack role add --project myproject --user myuser myrole
+
+
+
+
+
+
+
+
+
+
+CREATE DATABASE glance;
+GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' \
+  IDENTIFIED BY 'c09d33187cb792f6a9c10a11f721fe';
+GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' \
+  IDENTIFIED BY 'c09d33187cb792f6a9c10a11f721fe';
+
+openstack user create --domain default --password-prompt glance
+fea699fdace3c629cb31f14f4ac6a4
+openstack role add --project service --user glance admin
+openstack service create --name glance \
+  --description "OpenStack Image" image
+openstack endpoint create --region RegionOne \
+  image public http://controller:9292
+openstack endpoint create --region RegionOne \
+  image internal http://controller:9292
+openstack endpoint create --region RegionOne \
+  image admin http://controller:9292
+
+
+yum install openstack-glance
+
+vi /etc/glance/glance-api.conf
+[database]
+# ...
+connection = mysql+pymysql://glance:c09d33187cb792f6a9c10a11f721fe@controller/glance
+
+[keystone_authtoken]
+# ...
+www_authenticate_uri  = http://controller:5000
+auth_url = http://controller:5000
+memcached_servers = controller:11211
+auth_type = password
+project_domain_name = Default
+user_domain_name = Default
+project_name = service
+username = glance
+password = fea699fdace3c629cb31f14f4ac6a4
+
+[paste_deploy]
+# ...
+flavor = keystone
+
+[glance_store]
+# ...
+stores = file,http
+default_store = file
+filesystem_store_datadir = /var/lib/glance/images/
+
+
+su -s /bin/sh -c "glance-manage db_sync" glance
+
+
+systemctl enable openstack-glance-api.service
+
+systemctl start openstack-glance-api.service
+
+
+mysql
+CREATE DATABASE placement;
+
+GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'localhost' \
+  IDENTIFIED BY '9fbef481808599c4ff0d11b5803c5d';
+GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' \
+  IDENTIFIED BY '9fbef481808599c4ff0d11b5803c5d';
+
+
+openstack user create --domain default --password-prompt placement
+b73b44012f4843208d5888d30add12
+openstack role add --project service --user placement admin
+openstack service create --name placement --description "Placement API" placement
+openstack endpoint create --region RegionOne placement public http://controller:8778
+openstack endpoint create --region RegionOne placement internal http://controller:8778
+openstack endpoint create --region RegionOne placement admin http://controller:8778
+
+
+yum install openstack-placement-api -y
+
+vi /etc/placement/placement.conf
+
+[placement_database]
+# ...
+connection = mysql+pymysql://placement:9fbef481808599c4ff0d11b5803c5d@controller/placement
+
+[api]
+# ...
+auth_strategy = keystone
+
+[keystone_authtoken]
+# ...
+auth_url = http://controller:5000/v3
+memcached_servers = controller:11211
+auth_type = password
+project_domain_name = Default
+user_domain_name = Default
+project_name = service
+username = placement
+password = b73b44012f4843208d5888d30add12
+
+
+ su -s /bin/sh -c "placement-manage db sync" placement
+
+
+
+
+
+
+CREATE DATABASE nova_api;
+CREATE DATABASE nova;
+CREATE DATABASE nova_cell0;
+
+GRANT ALL PRIVILEGES ON nova_api.* TO 'nova'@'localhost' \
+  IDENTIFIED BY 'ea8a5fd04df9d9a7b8ab166afd7606';
+GRANT ALL PRIVILEGES ON nova_api.* TO 'nova'@'%' \
+  IDENTIFIED BY 'ea8a5fd04df9d9a7b8ab166afd7606';
+
+GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' \
+  IDENTIFIED BY 'ea8a5fd04df9d9a7b8ab166afd7606';
+GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' \
+  IDENTIFIED BY 'ea8a5fd04df9d9a7b8ab166afd7606';
+
+GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'localhost' \
+  IDENTIFIED BY 'ea8a5fd04df9d9a7b8ab166afd7606';
+GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'%' \
+  IDENTIFIED BY 'ea8a5fd04df9d9a7b8ab166afd7606';
+
+openstack user create --domain default --password-prompt nova
+355194d78c92deac59d2a23d838f3d
+openstack role add --project service --user nova admin
+openstack service create --name nova --description "OpenStack Compute" compute
+openstack endpoint create --region RegionOne compute public http://controller:8774/v2.1
+openstack endpoint create --region RegionOne compute internal http://controller:8774/v2.1
+openstack endpoint create --region RegionOne compute admin http://controller:8774/v2.1
+
+
+
+
+
+yum install openstack-nova-api openstack-nova-conductor \
+  openstack-nova-novncproxy openstack-nova-scheduler -y
+
+
+
+vi /etc/nova/nova.conf
+
+[DEFAULT]
+enabled_apis = osapi_compute,metadata
+transport_url = rabbit://openstack:678ef7ef075f814d0599bd8ddfd318@controller:5672/
+my_ip = 10.0.0.11
+use_neutron = true
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+
+[api_database]
+# ...
+connection = mysql+pymysql://nova:ea8a5fd04df9d9a7b8ab166afd7606@controller/nova_api
+
+[database]
+# ...
+connection = mysql+pymysql://nova:ea8a5fd04df9d9a7b8ab166afd7606@controller/nova
+
+[api]
+# ...
+auth_strategy = keystone
+
+[keystone_authtoken]
+# ...
+www_authenticate_uri = http://controller:5000/
+auth_url = http://controller:5000/
+memcached_servers = controller:11211
+auth_type = password
+project_domain_name = Default
+user_domain_name = Default
+project_name = service
+username = nova
+password = 355194d78c92deac59d2a23d838f3d
+
+[vnc]
+enabled = true
+server_listen = $my_ip
+server_proxyclient_address = $my_ip
+
+[glance]
+# ...
+api_servers = http://controller:9292
+
+[oslo_concurrency]
+# ...
+lock_path = /var/lib/nova/tmp
+
+[placement]
+# ...
+region_name = RegionOne
+project_domain_name = Default
+project_name = service
+auth_type = password
+user_domain_name = Default
+auth_url = http://controller:5000/v3
+username = placement
+password = b73b44012f4843208d5888d30add12
+
+su -s /bin/sh -c "nova-manage api_db sync" nova
+su -s /bin/sh -c "nova-manage cell_v2 map_cell0" nova
+su -s /bin/sh -c "nova-manage cell_v2 create_cell --name=cell1 --verbose" nova
+su -s /bin/sh -c "nova-manage db sync" nova
+su -s /bin/sh -c "nova-manage cell_v2 list_cells" nova
+
+systemctl enable \
+    openstack-nova-api.service \
+    openstack-nova-scheduler.service \
+    openstack-nova-conductor.service \
+    openstack-nova-novncproxy.service
+systemctl start \
+    openstack-nova-api.service \
+    openstack-nova-scheduler.service \
+    openstack-nova-conductor.service \
+    openstack-nova-novncproxy.service
+
+################ compute NODE
+###############################################
+vi /etc/nova/nova.conf
+
+[DEFAULT]
+# ...
+enabled_apis = osapi_compute,metadata
+transport_url = rabbit://openstack:678ef7ef075f814d0599bd8ddfd318@controller
+my_ip = 10.10.10.11
+use_neutron = true
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+
+[api]
+# ...
+auth_strategy = keystone
+
+[keystone_authtoken]
+# ...
+www_authenticate_uri = http://controller:5000/
+auth_url = http://controller:5000/
+memcached_servers = controller:11211
+auth_type = password
+project_domain_name = Default
+user_domain_name = Default
+project_name = service
+username = nova
+password = 355194d78c92deac59d2a23d838f3d
+
+[vnc]
+# ...
+enabled = true
+server_listen = 0.0.0.0
+server_proxyclient_address = $my_ip
+novncproxy_base_url = http://controller:6080/vnc_auto.html
+
+[glance]
+# ...
+api_servers = http://controller:9292
+
+[oslo_concurrency]
+# ...
+lock_path = /var/lib/nova/tmp
+
+
+[placement]
+# ...
+region_name = RegionOne
+project_domain_name = Default
+project_name = service
+auth_type = password
+user_domain_name = Default
+auth_url = http://controller:5000/v3
+username = placement
+password = b73b44012f4843208d5888d30add12
+
+
+egrep -c '(vmx|svm)' /proc/cpuinfo
+
+sudo systemctl enable libvirtd.service openstack-nova-compute.service
+sudo systemctl start libvirtd.service openstack-nova-compute.service
+
+
+
+
+
+
+
+###### BACK TO CONTROLLER =>############
+####################################
+
+CREATE DATABASE neutron;
+GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'localhost' IDENTIFIED BY 'a5dd9e8d2ea67d054d0053cf18e7fe';
+GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'%' IDENTIFIED BY 'a5dd9e8d2ea67d054d0053cf18e7fe';
+
+openstack user create --domain default --password-prompt neutron
+78b3d1220670cc00f198defbdea458
+openstack role add --project service --user neutron admin
+openstack service create --name neutron --description "OpenStack Networking" network
+
+openstack endpoint create --region RegionOne network public http://controller:9696
+openstack endpoint create --region RegionOne network internal http://controller:9696
+openstack endpoint create --region RegionOne network admin http://controller:9696
+
+
+sudo yum install openstack-neutron openstack-neutron-ml2  openstack-neutron-linuxbridge ebtables -y
+
+sudo vim /etc/neutron/neutron.conf
+[database]
+connection = mysql+pymysql://neutron:a5dd9e8d2ea67d054d0053cf18e7fe@controller/neutron
+
+[DEFAULT]
+core_plugin = ml2
+service_plugins = router
+allow_overlapping_ips = true
+transport_url = rabbit://openstack:678ef7ef075f814d0599bd8ddfd318@controller
+auth_strategy = keystone
+notify_nova_on_port_status_changes = true
+notify_nova_on_port_data_changes = true
+
+[keystone_authtoken]
+www_authenticate_uri = http://controller:5000
+auth_url = http://controller:5000
+memcached_servers = controller:11211
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+project_name = service
+username = neutron
+password = 78b3d1220670cc00f198defbdea458
+
+[nova]
+auth_url = http://controller:5000
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+region_name = RegionOne
+project_name = service
+username = nova
+password = 355194d78c92deac59d2a23d838f3d
+
+[oslo_concurrency]
+lock_path = /var/lib/neutron/tmp
+
+vim /etc/neutron/plugins/ml2/ml2_conf.ini
+
+[ml2]
+type_drivers = flat,vlan,vxlan
+tenant_network_types = vxlan
+mechanism_drivers = linuxbridge,l2population
+extension_drivers = port_security
+
+[ml2_type_flat]
+flat_networks = provider
+
+[ml2_type_vxlan]
+vni_ranges = 1:1000
+
+[securitygroup]
+enable_ipset = true
+
+
+sudo vim /etc/neutron/plugins/ml2/linuxbridge_agent.ini 
+[linux_bridge]
+physical_interface_mappings = provider:em1
+
+[vxlan]
+enable_vxlan = true
+local_ip = 10.10.10.18
+l2_population = true
+
+[securitygroup]
+enable_security_group = true
+firewall_driver = neutron.agent.linux.iptables_firewall.IptablesFirewallDriver
+
+
+
+modprobe br_netfilter
+sysctl -p
+
+sysctl net.bridge.bridge-nf-call-iptables
+sysctl net.bridge.bridge-nf-call-ip6tables
+
+
+vim /etc/neutron/l3_agent.ini
+
+[DEFAULT]
+interface_driver = linuxbridge
+
+
+sudo vi /etc/neutron/dhcp_agent.ini
+[DEFAULT]
+interface_driver = linuxbridge
+dhcp_driver = neutron.agent.linux.dhcp.Dnsmasq
+enable_isolated_metadata = true
+
+
+sudo vi /etc/neutron/metadata_agent.ini 
+[DEFAULT]
+# ...
+nova_metadata_host = controller
+metadata_proxy_shared_secret = 35ad6c47b2264316953584705fdfb5
+
+
+sudo vim /etc/nova/nova.conf
+[neutron]
+# ...
+auth_url = http://controller:5000
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+region_name = RegionOne
+project_name = service
+username = neutron
+password = 78b3d1220670cc00f198defbdea458
+service_metadata_proxy = true
+metadata_proxy_shared_secret = 35ad6c47b2264316953584705fdfb5
+
+
+ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
+su -s /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf \
+  --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" neutron
+
+systemctl restart openstack-nova-api.service
+
+sudo systemctl enable neutron-server.service \
+  neutron-linuxbridge-agent.service neutron-dhcp-agent.service \
+  neutron-metadata-agent.service
+sudo systemctl start neutron-server.service \
+  neutron-linuxbridge-agent.service neutron-dhcp-agent.service \
+  neutron-metadata-agent.service
+
+
+sudo systemctl enable neutron-l3-agent.service
+sudo systemctl start neutron-l3-agent.service
+
+
+##########################33
+COMPUTE NODE
+#######################
+sudo yum install openstack-neutron-linuxbridge ebtables ipset -y
+
+
+sudo vim /etc/neutron/neutron.conf
+
+[DEFAULT]
+# ...
+transport_url = rabbit://openstack:678ef7ef075f814d0599bd8ddfd318@controller
+auth_strategy = keystone
+
+[keystone_authtoken]
+# ...
+www_authenticate_uri = http://controller:5000
+auth_url = http://controller:5000
+memcached_servers = controller:11211
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+project_name = service
+username = neutron
+password = 78b3d1220670cc00f198defbdea458
+
+[oslo_concurrency]
+lock_path = /var/lib/neutron/tmp
+
+
+sudo vi /etc/neutron/plugins/ml2/linuxbridge_agent.ini
+[linux_bridge]
+physical_interface_mappings = provider:em1
+
+[vxlan]
+enable_vxlan = true
+local_ip = 10.10.10.11
+l2_population = true
+
+[securitygroup]
+enable_security_group = true
+firewall_driver = neutron.agent.linux.iptables_firewall.IptablesFirewallDriver
+
+
+modprobe br_netfilter
+sysctl -p
+sysctl net.bridge.bridge-nf-call-iptables
+sysctl net.bridge.bridge-nf-call-ip6tables
+
+sudo vi /etc/nova/nova.conf
+[neutron]
+# ...
+auth_url = http://controller:5000
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+region_name = RegionOne
+project_name = service
+username = neutron
+password = 78b3d1220670cc00f198defbdea458
+
+
+
+systemctl restart openstack-nova-compute.service
+systemctl restart neutron-linuxbridge-agent.service
+
+sudo systemctl enable neutron-linuxbridge-agent.service
+sudo systemctl start neutron-linuxbridge-agent.service
+
+############### BACK TO CONTROLLER #######################
+##########################################################
+. admin-openrc
+
+openstack extension list --network
+openstack network agent list
+
+unset OS_AUTH_URL OS_PASSWORD
+openstack --os-auth-url http://controller:5000/v3 --os-project-domain-name Default --os-user-domain-name Default --os-project-name service --os-username neutron token issue
+
+systemctl restart openstack-nova-compute.service
+systemctl restart neutron-linuxbridge-agent.service
+./startup.sh

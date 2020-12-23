@@ -87,5 +87,3 @@ yum remove \
  && rm -rf ~/startup.sh
 
 # Teardown more folders for firewalld.
-
- 

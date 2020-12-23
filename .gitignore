@@ -2,4 +2,4 @@
 .cache/*
 .cp/*
 group_vars/*
-images/
+saved_images/
