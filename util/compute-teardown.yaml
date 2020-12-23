@@ -1,0 +1,23 @@
+- hosts: computes
+  tasks:
+    - name: 'remove nova packages'
+      yum:
+        name:
+          - centos-release-openstack-train
+          - python-openstackclient
+          - openstack-selinux
+          - openstack-nova-compute
+          - openstack-neutron-linuxbridge
+          - ebtables
+          - ipsest
+          - chrony
+          - firewalld
+        state: removed
+    - name: 'remove firewalld zones'
+      shell: rm -rf /etc/firewalld/zones
+    - name: 'remove startup script'
+      shell: rm -rf ~/startup.sh
+    - name: 'remove nova state path'
+      shell: rm -rf /home/nova # TODO: test if using variable {{ nova_state_path}} instead will work
+      tags:
+        - teardown # should this be -nova -teardown ?

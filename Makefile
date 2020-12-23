@@ -1,24 +1,30 @@
 BRANCH=main
 # takes a CSV of tags to skip: ex: 'basic, mariadb'
 SKIP=none
+INVENTORY=test.inventory
 
 update:
 	git fetch -t -p
 	git pull origin $(BRANCH)
 
-TEST_CLUSTER:
+cluster:
 	# ansible-playbook -i inventory util/gather-facts.yaml --extra-vars "ansible_ssh_pass=root"
-	ansible-playbook -i test.inventory cluster.yaml --extra-vars "ansible_ssh_pass=root" --skip-tag $(SKIP) --flush-cache
+	ansible-playbook -i $(INVENTORY) cluster.yaml --extra-vars "ansible_ssh_pass=root" --skip-tag $(SKIP) --flush-cache
 
-PRODUCTION_CLUSTER:
-	# ansible-playbook -i inventory util/gather-facts.yaml --extra-vars "ansible_ssh_pass=root"
-	ansible-playbook -i prod.inventory cluster.yaml --extra-vars "ansible_ssh_pass=root" --skip-tag $(SKIP) --flush-cache
-
-PRODUCTION_PING:
-	ansible-playbook -i prod.inventory util/ping.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
-
-TEST_PING:
-	ansible-playbook -i test.inventory util/ping.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
+ping:
+	ansible-playbook -i $(INVENTORY) util/ping.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
 
 startup:
-	ansible-playbook -i prod.inventory util/startup.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
+	ansible-playbook -i $(INVENTORY) util/startup.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
+
+scripts:
+	ansible-playbook -i $(INVENTORY) util/classroom-builder.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
+
+teardown-block:
+	ansible-playbook -i $(INVENTORY) util/block-teardown.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
+
+teardown-compute:
+	ansible-playbook -i $(INVENTORY) util/compute-teardown.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
+
+teardown-controller:
+	ansible-playbook -i $(INVENTORY) util/controller-teardown.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
