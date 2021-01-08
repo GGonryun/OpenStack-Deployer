@@ -1,15 +1,24 @@
+# install:
+curl -L https://toolbelt.treasuredata.com/sh/install-redhat-td-agent4.sh | sh
+
+# update config
 rm -f /etc/td-agent/td-agent.conf
 vim /etc/td-agent/td-agent.conf
 
+# update service
+sudo systemctl start td-agent.service
+sudo systemctl enable td-agent.service
 sudo systemctl restart td-agent.service
 
+# send messages
 curl -X POST -d 'json={"json":"message"}' http://localhost:8888/debug.test
 tail -n 1 /var/log/td-agent/td-agent.log
 
 
-vi /usr/lib/systemd/system/td-agent.service
-
 #change td-agent to root
-
+vi /usr/lib/systemd/system/td-agent.service
+## [Service]
+## User=root
+## Group=root
 sudo systemctl daemon-reload
 sudo systemctl restart td-agent.service
