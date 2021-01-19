@@ -1,7 +1,7 @@
 ## provider network:
 source ~/admin.sh
 openstack network create --share --external --provider-physical-network provider --provider-network-type flat provider
-openstack subnet create --network provider --allocation-pool start=192.168.128.201,end=192.168.128.254 --dns-nameserver 8.8.8.8 --gateway 192.168.128.1 --subnet-range 192.168.128.0/24 provider
+openstack subnet create --network provider --allocation-pool start=192.168.129.201,end=192.168.129.254 --dns-nameserver 8.8.8.8 --gateway 192.168.129.1 --subnet-range 192.168.129.0/24 provider
 ## self service network:
 ### create network
 openstack network create selfservice

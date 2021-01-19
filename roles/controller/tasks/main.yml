@@ -329,7 +329,7 @@
     openstack project create --domain default --description "Service Project" service
     openstack role create {{ student_role_name }}
     openstack role create {{ service_role_name }}
-
+    openstack role create {{ permission_role_name }}
   when: install_keystone is changed
   tags:
     - openstack

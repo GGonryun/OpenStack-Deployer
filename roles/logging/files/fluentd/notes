@@ -22,3 +22,4 @@ vi /usr/lib/systemd/system/td-agent.service
 ## Group=root
 sudo systemctl daemon-reload
 sudo systemctl restart td-agent.service
+

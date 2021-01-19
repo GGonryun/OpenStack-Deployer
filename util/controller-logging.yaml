@@ -1,0 +1,30 @@
+- hosts: controllers
+  tasks:
+    - name: Install Fluentd
+      shell: 'curl -L https://toolbelt.treasuredata.com/sh/install-redhat-td-agent4.sh | sh'
+    - name: 'Add Configuration File'
+      copy:
+        backup: true
+        src: files/controller.fluent.conf
+        dest: /etc/td-agent/td-agent.conf
+    - name: 'Open Port On Firewalld'
+      shell: 'firewall-cmd --add-port=24224/tcp --permanent'
+      ignore_errors: True
+    - name: 'Change td-agent to root'
+      replace:
+        path: /usr/lib/systemd/system/td-agent.service
+        regexp: '=td-agent[^:]'
+        replace: '=root'
+    - name: 'Reload Daemon and Restart service'
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: td-agent.service
+    # - name: 'Send Debug Message'
+    #   shell: "curl -X POST -d 'json={\"json\":\"message\"}' http://localhost:8888/debug.test"
+    # - name: 'Verify Debug Message Recieved'
+    #   register: debug_message
+    #   shell: 'tail -n 1 /var/log/td-agent/td-agent.log'
+    # - name: 'Print debug message'
+    #   debug:
+        # var: debug_message

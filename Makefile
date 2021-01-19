@@ -20,11 +20,13 @@ startup:
 scripts:
 	ansible-playbook -i $(INVENTORY) util/classroom-builder.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
 
-teardown-block:
-	ansible-playbook -i $(INVENTORY) util/block-teardown.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
-
-teardown-compute:
+teardown:
+	#ansible-playbook -i $(INVENTORY) util/block-teardown.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
 	ansible-playbook -i $(INVENTORY) util/compute-teardown.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
-
-teardown-controller:
 	ansible-playbook -i $(INVENTORY) util/controller-teardown.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
+
+logging:
+	ansible-playbook -i $(INVENTORY) util/logging-server-logging.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
+	ansible-playbook -i $(INVENTORY) util/controller-logging.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
+	#ansible-playbook -i $(INVENTORY) util/compute-logging.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
+

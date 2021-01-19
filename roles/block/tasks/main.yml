@@ -3,6 +3,21 @@
   pause:
     prompt: "This host should have two more partitions labelled: /dev/sdb /dev/sdc, if this hasn't been done please abort this playbook. View https://docs.openstack.org/cinder/train/install/cinder-storage-install-rdo.html for more information."
 
+- name: 'install packages'
+  yum:
+    name:
+      - centos-release-openstack-train
+    state: present
+  tags:
+    - basic
+    
+- name: 'Upgrade all packages'
+  yum:
+    name: '*'
+    state: latest
+  tags:
+    - basic
+
 - name: 'copy chrony template'
   template:
     backup: yes
