@@ -10,4 +10,8 @@
           - python-keystone
         state: removed
       tags:
-        - teardown
+        - block
+    - name: 'Clean Volume'
+      shell: "wipefs -a /dev/sdb"
+      tags:
+        - block

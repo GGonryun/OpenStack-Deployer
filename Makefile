@@ -21,7 +21,7 @@ scripts:
 	ansible-playbook -i $(INVENTORY) util/classroom-builder.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
 
 teardown:
-	#ansible-playbook -i $(INVENTORY) util/block-teardown.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
+	ansible-playbook -i $(INVENTORY) util/block-teardown.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
 	ansible-playbook -i $(INVENTORY) util/compute-teardown.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
 	ansible-playbook -i $(INVENTORY) util/controller-teardown.yaml --extra-vars "ansible_ssh_pass=root" --flush-cache
 

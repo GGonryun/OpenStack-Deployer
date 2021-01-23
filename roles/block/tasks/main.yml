@@ -62,16 +62,14 @@
         - /dev/sdb
     - name: 'copy lvm conf'
       template:
-        src:  cinder/lvm.conf.j2
+        src:  lvm.conf.j2
         dest: /etc/lvm/lvm.conf 
         backup: yes
     - name: 'copy conf'
       template:
-        src:  cinder/cinder.conf.j2
+        src:  cinder.conf.j2
         dest: /etc/cinder/cinder.conf 
         backup: yes
-    - name: 'update permissions'
-      shell: chown -R glance:glance /var/log/glance/api.log
     - name: 'disable selinux'
       shell: setenforce 0
     - name: 'start cinder volumes'

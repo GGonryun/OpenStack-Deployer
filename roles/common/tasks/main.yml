@@ -1,4 +1,9 @@
 ---
+
+- name: 'display warning'
+  pause:
+    prompt: "Make sure you have a fully updated server kernel before running this cos it takes too long! >:O"
+
 - name: 'update and upgrade packages'
   yum:
     update_cache: 'yes'
@@ -33,6 +38,7 @@
     - basic
     - hosts
 
+# this is needed because there is a bug with horizon that needs a specific timezone set
 - name: 'set timezone'
   timezone:
     name: "{{openstack_timezone}}"
