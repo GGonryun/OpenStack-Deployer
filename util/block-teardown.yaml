@@ -1,5 +1,10 @@
+---
 - hosts: blocks
   tasks:
+  
+    - name: 'display warning'
+      pause:
+        prompt: "Make sure you have fully wiped the drives or else 'make cluster' does not work!"
     - name: 'teardown cinder'
       yum:
         name:
