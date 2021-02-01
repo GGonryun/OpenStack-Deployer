@@ -31,6 +31,6 @@ nova-status upgrade check
 openstack extension list --network
 openstack network agent list
 
-curl -I -L -X get http://192.168.128.77/dashboard/auth/login
+curl -I -L -X get http://192.168.129.77/dashboard/auth/login
 
 openstack volume service list

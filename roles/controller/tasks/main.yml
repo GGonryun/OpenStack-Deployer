@@ -803,7 +803,7 @@
         state: started
         enabled: yes
     - name: 'update permissions'
-      shell: chown -R cinder:cinder /var/log/cinder/cinder-manage.log
+      shell: chown -R cinder:cinder /var/log/cinder/
     - name: 'sync db'
       become: cinder
       shell: '/bin/sh -c "cinder-manage db sync"'
